@@ -1,0 +1,54 @@
+{
+  "name": "extshield",
+  "version": "1.0.0",
+  "description": "Chrome 扩展合规加固工具:激进压缩 + 改名 + 合规扫描,在不过审核红线的前提下提高逆向门槛",
+  "bin": {
+    "extshield": "bin/extshield.js"
+  },
+  "main": "src/harden.js",
+  "scripts": {
+    "harden": "node bin/extshield.js harden",
+    "verify": "node bin/extshield.js verify",
+    "demo": "node bin/extshield.js demo",
+    "demo:wasm": "node bin/extshield.js demo --wasm",
+    "gui": "node gui/server.js",
+    "test": "node test/e2e-wasm.js"
+  },
+  "keywords": [
+    "chrome-extension",
+    "minify",
+    "obfuscation-policy",
+    "web-store-compliance"
+  ],
+  "author": "TikyZ",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TikyZ/extshield.git"
+  },
+  "bugs": {
+    "url": "https://github.com/TikyZ/extshield/issues"
+  },
+  "homepage": "https://github.com/TikyZ/extshield#readme",
+  "files": [
+    "bin/",
+    "src/",
+    "templates/",
+    "wasm-template/",
+    "sample/",
+    "gui/",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "esbuild": "^0.21.5",
+    "terser": "^5.31.0",
+    "acorn": "^8.17.0",
+    "assemblyscript": "^0.28.19"
+  },
+  "devDependencies": {}
+}

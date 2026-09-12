@@ -1,0 +1,12 @@
+# 统一换行：仓库内一律按 LF 存储，避免 Windows/macOS 协作时整文件 diff
+* text=auto eol=lf
+
+# 二进制文件不做换行/文本处理
+*.wasm binary
+*.png binary
+*.ico binary
+*.jpg binary
+*.zip binary
+
+# 依赖锁文件在 GitHub 上折叠显示（不影响正常 diff）
+package-lock.json linguist-generated=true

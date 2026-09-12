@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>extshield · 扩展合规打包器</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="wrap">
+    <header class="hero">
+      <div class="logo">🛡️</div>
+      <div>
+        <h1>extshield 可视化打包器</h1>
+        <p class="sub">选插件文件夹 → 选保护方式 → 一键合规打包。只做压缩与 WASM 下沉,不做被商店禁止的混淆。</p>
+      </div>
+    </header>
+
+    <!-- 步骤 1:选文件夹 -->
+    <section class="card step">
+      <div class="step-no">1</div>
+      <div class="step-body">
+        <h2>选择插件文件夹</h2>
+        <label class="picker">
+          <input type="file" id="folder" webkitdirectory directory multiple />
+          <span id="folderLabel">点击选择扩展根目录(含 manifest.json)</span>
+        </label>
+        <div id="folderInfo" class="info hidden"></div>
+      </div>
+    </section>
+
+    <!-- 步骤 2:选方式 -->
+    <section class="card step">
+      <div class="step-no">2</div>
+      <div class="step-body">
+        <h2>选择保护方式 <span class="step-hint">二选一</span></h2>
+        <div class="methods">
+          <label class="method" data-method="minify">
+            <input type="radio" name="method" value="minify" />
+            <div class="method-inner">
+              <div class="method-title">激进压缩 (Minify)</div>
+              <div class="method-desc">esbuild 去空白/改名/去注释/去 console。合规,逆向需费力解读。轻量快速,是所有模式的基础。</div>
+            </div>
+          </label>
+
+          <label class="method" data-method="wasm">
+            <input type="radio" name="method" value="wasm" checked />
+            <div class="method-inner">
+              <div class="method-title">激进压缩 + WASM 下沉 <span class="rec">推荐</span></div>
+              <div class="method-desc">在压缩基础上,把核心逻辑编译成 WebAssembly 二进制,逆向需反汇编。合规,且复刻门槛更高。wasm 以 base64 内联进 JS,不产出可单独下载的 wasm 文件。</div>
+              <div class="method-note">把核心算法写成 core.ts 放进插件根目录即可现场编译;不写也行——工具会自动扫出适合下沉的纯计算函数。一个都挑不出时会如实告诉你,不会拿示例 wasm 充数。</div>
+            </div>
+          </label>
+        </div>
+
+        <label class="extra-toggle">
+          <input type="checkbox" id="mangleProps" /> 属性名也改名(更激进,可能破坏外部 API)——压缩阶段生效
+        </label>
+      </div>
+    </section>
+
+    <!-- 步骤 3:打包 -->
+    <section class="card step">
+      <div class="step-no">3</div>
+      <div class="step-body">
+        <h2>开始打包</h2>
+        <p class="pack-hint">点击后会先弹出「另存为」窗口,你选好保存位置和文件名,再开始打包。</p>
+        <button id="packBtn" class="primary" disabled>开始打包</button>
+        <div id="progress" class="progress hidden"></div>
+        <div id="result" class="result hidden"></div>
+      </div>
+    </section>
+
+    <!-- 步骤 4:合规扫描报告 -->
+    <section class="card step">
+      <div class="step-no">4</div>
+      <div class="step-body">
+        <h2>合规扫描报告 <span class="step-hint">打包后自动生成</span></h2>
+        <div id="reportEmpty" class="info">打包完成后,这里会显示产物是否触碰 Chrome Web Store 审核红线(高危 / 中等 / 提示)。</div>
+        <div id="report" class="report hidden"></div>
+      </div>
+    </section>
+
+    <footer class="foot">
+      合规提示:本工具刻意不做字符串加密 / 控制流平坦化 / eval 解密代码——易触发 Chrome Web Store 审核拒绝。
+      只做服务端下沉或 WASM。
+    </footer>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
