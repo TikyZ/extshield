@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * extshield — Chrome 扩展合规加固 CLI
+ * extshield — Chrome 扩展压缩合规加固 CLI
  *
  * 子命令:
  *   harden   对扩展源码做合规加固(激进压缩 + 改名 + 去注释/sourcemap)
@@ -23,7 +23,7 @@ const CONFIG = require('../src/config');
 
 function printHelp() {
   console.log(`
-extshield — Chrome 扩展合规加固工具
+extshield — Chrome 扩展压缩合规加固工具
 
 用法:
   extshield harden [--src <dir>] [--out <dir>] [--config <file>] [--mangle-props] [--wasm]

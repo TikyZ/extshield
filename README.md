@@ -1,4 +1,4 @@
-# extshield — Chrome 扩展合规加固工具
+# extshield — Chrome 扩展压缩合规加固工具
 
 <p>
   <img alt="license" src="https://img.shields.io/badge/license-MIT-blue.svg" />

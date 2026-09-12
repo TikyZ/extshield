@@ -1,7 +1,7 @@
 {
   "name": "extshield",
   "version": "1.0.0",
-  "description": "Chrome 扩展合规加固工具:激进压缩 + 改名 + 合规扫描,在不过审核红线的前提下提高逆向门槛",
+  "description": "Chrome 扩展压缩合规加固工具:esbuild 激进压缩 + terser 属性改名 + 合规扫描,在不过审核红线的前提下提高逆向门槛",
   "bin": {
     "extshield": "bin/extshield.js"
   },
