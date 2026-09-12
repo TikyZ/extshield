@@ -12,6 +12,7 @@
     "demo": "node bin/extshield.js demo",
     "demo:wasm": "node bin/extshield.js demo --wasm",
     "gui": "node gui/server.js",
+    "notices": "node scripts/gen-notices.js",
     "test": "node test/e2e-wasm.js"
   },
   "keywords": [
@@ -33,12 +34,14 @@
   "files": [
     "bin/",
     "src/",
+    "scripts/",
     "templates/",
     "wasm-template/",
     "sample/",
     "gui/",
     "README.md",
     "CHANGELOG.md",
+    "THIRD-PARTY-NOTICES.md",
     "LICENSE"
   ],
   "engines": {
