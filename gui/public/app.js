@@ -11,6 +11,37 @@ let selectedFiles = []; // { path, data(base64) }
 // 已选文件夹的信息快照 —— 切换语言时据此重新渲染,而不是留下另一种语言的残句
 let folderState = null; // { count, hasManifest, entries, parseFailed }
 
+// 进度 / 结果 / 报告的「数据快照」—— 切换语言时据此用新语言原地重绘,
+// 而不是把已经出来的结果收起、让用户重新打包一遍。
+let lastProgress = null; // { mode, savingName }
+let lastResult = null;   // { cls, key, params }
+let lastReport = null;   // /api/pack 返回的 report 对象
+
+// 按当前语言重绘进度区(打包进行中切语言 / 复用同一段逻辑)
+function redrawProgress() {
+  if (!lastProgress) {
+    progress.classList.add('hidden');
+    return;
+  }
+  progress.innerHTML =
+    I18N.t('pack.running', { mode: lastProgress.mode }) +
+    (lastProgress.savingName
+      ? '<div class="sub-prog">' + I18N.t('pack.savingTo', { name: esc(lastProgress.savingName) }) + '</div>'
+      : '');
+  progress.classList.remove('hidden');
+}
+
+// 按当前语言重绘结果区(成功 / 失败 / 提示 都只存参数,文案每次现取)
+function redrawResult() {
+  if (!lastResult) {
+    result.classList.add('hidden');
+    return;
+  }
+  result.className = lastResult.cls;
+  result.innerHTML = I18N.t(lastResult.key, lastResult.params || {});
+  result.classList.remove('hidden');
+}
+
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({
     '&': '&amp;',
@@ -286,9 +317,8 @@ packBtn.addEventListener('click', async () => {
   // 收集选中的保护方式(单选)
   const checked = document.querySelector('input[name="method"]:checked');
   if (!checked) {
-    result.className = 'result err';
-    result.innerHTML = I18N.t('pack.noMethod');
-    result.classList.remove('hidden');
+    lastResult = { cls: 'result err', key: 'pack.noMethod' };
+    redrawResult();
     return;
   }
   const methods = [checked.value];
@@ -301,18 +331,19 @@ packBtn.addEventListener('click', async () => {
     handle = await pickSaveHandle(defaultName);
   } catch (e) {
     // 用户在另存为窗口点了取消 → 不打包,直接结束
-    result.className = 'result err';
-    result.innerHTML = I18N.t('pack.canceled');
-    result.classList.remove('hidden');
+    lastResult = { cls: 'result err', key: 'pack.canceled' };
+    redrawResult();
     return;
   }
 
   packBtn.disabled = true;
-  result.classList.add('hidden');
-  progress.classList.remove('hidden');
-  progress.innerHTML =
-    I18N.t('pack.running', { mode: checked.value }) +
-    (handle ? '<div class="sub-prog">' + I18N.t('pack.savingTo', { name: esc(handle.name) }) + '</div>' : '');
+  // 新一轮打包:清掉上一轮的结果与报告
+  lastResult = null;
+  lastReport = null;
+  lastProgress = { mode: checked.value, savingName: handle ? handle.name : null };
+  redrawResult();
+  hideReport();
+  redrawProgress();
 
   try {
     const resp = await fetch('/api/pack', {
@@ -335,28 +366,33 @@ packBtn.addEventListener('click', async () => {
     const blob = new Blob([bytes], { type: 'application/zip' });
     const saved = await saveZip(blob, handle, data.filename || defaultName);
 
-    progress.classList.add('hidden');
-    result.className = 'result ok';
-    result.innerHTML = saved.picked
-      ? I18N.t('pack.savedTo', { name: esc(saved.name) })
-      : I18N.t('pack.downloaded', { name: esc(saved.name) });
+    lastProgress = null;
+    lastResult = {
+      cls: 'result ok',
+      key: saved.picked ? 'pack.savedTo' : 'pack.downloaded',
+      params: { name: esc(saved.name) },
+    };
+    redrawProgress();
+    redrawResult();
 
-    // 2) 展示合规扫描报告
-    renderReport(data.report);
+    // 2) 展示合规扫描报告(数据留存,切换语言时用新语言重绘)
+    lastReport = data.report || null;
+    renderReport(lastReport);
   } catch (e) {
-    progress.classList.add('hidden');
-    result.className = 'result err';
-    result.innerHTML = I18N.t('pack.failed', { msg: esc(e.message) });
+    lastProgress = null;
+    lastResult = { cls: 'result err', key: 'pack.failed', params: { msg: esc(e.message) } };
+    redrawProgress();
+    redrawResult();
   } finally {
     packBtn.disabled = false;
   }
 });
 
-// 切换语言:i18n 已刷新静态文案,这里把动态区域按新语言重建,
-// 避免出现中英混排;旧语言的报告/结果直接收起,重新打包即可。
+// 切换语言:i18n 已刷新静态文案,这里把动态区域(进度 / 结果 / 报告 / 文件夹信息)
+// 按留存的数据用新语言原地重绘 —— 不重载页面,也不会丢掉已经出来的结果。
 I18N.onChange(() => {
-  progress.classList.add('hidden');
-  result.classList.add('hidden');
-  hideReport();
+  redrawProgress();
+  redrawResult();
+  if (lastReport) renderReport(lastReport);
   renderFolderInfo();
 });
