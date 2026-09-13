@@ -2,6 +2,23 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.2] - 2026-09-13
+
+### 新增
+
+- **安装前检查**:打包完成后检查这个包能不能顺利装进浏览器,报告三类硬伤 ——
+  Manifest 版本(V2 已被 Chrome / Edge 停用,会被拒绝加载)、
+  manifest 中引用但产物里不存在的文件(表现为图标缺失或页面空白)、
+  会被浏览器拒绝加载的写法(如 MV3 的 CSP 误用 `unsafe-eval`)。
+  CLI 与可视化界面都会展示。
+
+### 修复
+
+- **补齐 manifest 入口探测字段**:`browser_action` / `page_action` / `chrome_url_overrides` /
+  `devtools_page` / `side_panel` / `sandbox` / `background.page` 声明的页面此前不会被收集,
+  这些页面里的 `<script src>` 不进产物,导致打包报错。新标签页、侧边栏、DevTools 面板
+  这几类扩展此前无法打包。
+
 ## [1.0.1] - 2026-09-13
 
 ### 新增

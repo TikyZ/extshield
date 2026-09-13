@@ -155,6 +155,33 @@ function renderReport(report) {
     html += '</div>';
   }
 
+  // 浏览器兼容性(安装前检查):只列会导致装不上 / 装了是坏的硬伤
+  const cm = report.compat;
+  if (cm && cm.hasManifest) {
+    html += '<div class="rbody" style="margin-top:10px">';
+    html += '<div style="font-weight:600;margin-bottom:4px">' + I18N.t('compat.title') + '</div>';
+    html += '<div>' + I18N.t('compat.mv') + ': ' + esc(cm.mv) + '</div>';
+    if (cm.missing && cm.missing.length) {
+      html +=
+        '<div style="color:#b91c1c;margin-top:6px">❌ ' +
+        I18N.t('compat.missing', { n: cm.missingTotal || cm.missing.length });
+      for (const r of cm.missing) {
+        html += '<div style="margin-left:12px">- ' + esc(r.file) + ' (' + esc(r.where) + ')</div>';
+      }
+      if (cm.missingTotal > cm.missing.length) {
+        html += I18N.t('compat.missingMore', { n: cm.missingTotal - cm.missing.length });
+      }
+      html += '</div>';
+    }
+    for (const w of cm.warnings || []) {
+      html += '<div style="margin-top:4px">❌ ' + esc(w.text) + '</div>';
+    }
+    if (!cm.missing.length && !(cm.warnings || []).length) {
+      html += '<div>✅ ' + I18N.t('compat.clean') + '</div>';
+    }
+    html += '</div>';
+  }
+
   box.className = 'report ' + (report.passed ? 'ok' : 'bad');
   box.innerHTML = html;
   box.classList.remove('hidden');

@@ -81,6 +81,13 @@
       'report.wasm.skippedMore': '<br><span style="opacity:.75">另有 {n} 个函数未下沉(涉及浏览器 / 扩展 API 或非数值运算):{names}{etc}</span>',
       'report.wasm.etc': ' 等',
 
+      // ── 浏览器兼容性(安装前检查)──
+      'compat.title': '浏览器兼容性',
+      'compat.mv': 'manifest_version',
+      'compat.missing': 'manifest 引用了 {n} 个产物中不存在的文件(会导致图标缺失 / 页面空白):',
+      'compat.missingMore': ' …另有 {n} 个',
+      'compat.clean': '未发现会导致安装失败的问题',
+
       // ── 文件夹选择 ──
       'folder.selected': '已选择 {n} 个文件',
       'folder.loaded': '已载入 <b>{n}</b> 个文件。',
@@ -159,6 +166,13 @@
       'report.wasm.exportsLabel': ' · Exports: {names}',
       'report.wasm.skippedMore': '<br><span style="opacity:.75">{n} more function(s) were not sunk (they touch browser / extension APIs, or are not numeric): {names}{etc}</span>',
       'report.wasm.etc': ' …',
+
+      // ── Browser compatibility (pre-install check) ──
+      'compat.title': 'Browser compatibility',
+      'compat.mv': 'manifest_version',
+      'compat.missing': 'The manifest references {n} file(s) missing from the package (icons may not show / pages render blank):',
+      'compat.missingMore': ' …and {n} more',
+      'compat.clean': 'No issue that would prevent installation was found',
 
       // ── Folder picking ──
       'folder.selected': '{n} file(s) selected',

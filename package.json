@@ -1,6 +1,6 @@
 {
   "name": "extshield",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Minify and harden Chrome extensions without breaking Web Store policy — esbuild minification, terser property mangling, WASM sinking and a pre-upload compliance scan.",
   "bin": {
     "extshield": "bin/extshield.js"

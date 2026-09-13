@@ -24,6 +24,7 @@ const HARDEN = require(path.join(ROOT, 'src', 'harden'));
 const VERIFY = require(path.join(ROOT, 'src', 'verify'));
 // WASM 下沉编排(与 CLI 共用同一份实现)
 const WASMSINK = require(path.join(ROOT, 'src', 'wasm-sink'));
+const COMPAT = require(path.join(ROOT, 'src', 'compat'));
 const ZIP = require(path.join(ROOT, 'src', 'zip'));
 const { DEFAULTS } = CONFIG;
 
@@ -223,6 +224,17 @@ async function packTask(id, { methods, mangleProps, files }) {
       snippet: h.snippet,
       file: rel(h.file),
     })),
+  };
+
+  // 安装前检查:必须在 cleanupTask 之前做 —— 之后产物目录就被删了。
+  // 只查会导致装不上 / 装了是坏的硬伤(MV 版本不对、manifest 引用的文件缺失等)。
+  const compat = COMPAT.analyze(outDir);
+  report.compat = {
+    mv: compat.mv,
+    hasManifest: compat.hasManifest,
+    missing: compat.missing.slice(0, 20),
+    missingTotal: compat.missing.length,
+    warnings: compat.warnings,
   };
 
   const zipPath = path.join(WORK, id, 'dist.zip');

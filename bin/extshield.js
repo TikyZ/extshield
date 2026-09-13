@@ -19,6 +19,7 @@ const fs = require('fs');
 
 const HARDEN = require('../src/harden');
 const VERIFY = require('../src/verify');
+const COMPAT = require('../src/compat');
 const CONFIG = require('../src/config');
 
 function printHelp() {
@@ -201,6 +202,8 @@ async function run() {
       wasmCore: args.wasmCore,
     });
     await runHarden(cfg, args);
+    // 加固完顺手检查:这个包能不能顺利装进浏览器
+    COMPAT.run(cfg);
     return;
   }
 
@@ -226,6 +229,7 @@ async function run() {
     });
     console.log('==> [1/2] harden 示例扩展');
     await runHarden(cfg, args);
+    COMPAT.run(cfg);
     console.log('\n==> [2/2] verify 加固产物');
     const report = await VERIFY.run(cfg, { strict: false });
     process.exit(report.exitCode);
