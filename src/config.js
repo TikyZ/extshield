@@ -96,18 +96,48 @@ function detectEntries(manifestPath, srcDir) {
     if (Array.isArray(manifest.background.scripts)) {
       manifest.background.scripts.forEach(pushJs);
     }
+    // MV2 的后台页:整页都是 HTML,里面的 <script src> 也得跟着进来
+    if (typeof manifest.background.page === 'string') {
+      pushHtml(manifest.background.page);
+    }
   }
   if (Array.isArray(manifest.content_scripts)) {
     manifest.content_scripts.forEach((cs) => {
       if (Array.isArray(cs.js)) cs.js.forEach(pushJs);
     });
   }
-  if (manifest.action && typeof manifest.action.default_popup === 'string') {
-    pushHtml(manifest.action.default_popup);
+
+  // 所有"会弹出/展示一个 HTML 页面"的字段都要收集。
+  // 少收一个,那个页面里的 <script src> 就不会被打包,
+  // 产物里 HTML 还在、JS 没了 —— 表现就是"装上了但点开没反应",
+  // 或者被 harden 自检直接以 404 拦下(连包都打不出来)。
+  const popupHosts = [
+    'action', // MV3
+    'browser_action', // MV2 / Firefox
+    'page_action', // MV2
+  ];
+  for (const key of popupHosts) {
+    const host = manifest[key];
+    if (host && typeof host.default_popup === 'string') pushHtml(host.default_popup);
   }
   if (typeof manifest.options_page === 'string') pushHtml(manifest.options_page);
   if (manifest.options_ui && typeof manifest.options_ui.page === 'string') {
     pushHtml(manifest.options_ui.page);
+  }
+  // 覆盖浏览器内置页(新标签页 / 历史 / 书签)
+  if (manifest.chrome_url_overrides) {
+    for (const v of Object.values(manifest.chrome_url_overrides)) pushHtml(v);
+  }
+  // Firefox 里同名字段也叫 chrome_url_overrides,但也有人写 browser_url_overrides
+  if (manifest.browser_url_overrides) {
+    for (const v of Object.values(manifest.browser_url_overrides)) pushHtml(v);
+  }
+  if (typeof manifest.devtools_page === 'string') pushHtml(manifest.devtools_page);
+  if (manifest.side_panel && typeof manifest.side_panel.default_path === 'string') {
+    pushHtml(manifest.side_panel.default_path);
+  }
+  if (manifest.sandbox && Array.isArray(manifest.sandbox.pages)) {
+    manifest.sandbox.pages.forEach(pushHtml);
   }
 
   // 解析 html 里引用的 <script src>
