@@ -1,4 +1,4 @@
-# extshield — Chrome 扩展压缩合规加固工具
+# extshield — Harden Chrome extensions without breaking Web Store policy
 
 <p>
   <img alt="license" src="https://img.shields.io/badge/license-MIT-blue.svg" />
@@ -6,142 +6,157 @@
   <img alt="platform" src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg" />
 </p>
 
-> 在**不踩 Chrome Web Store 审核红线**的前提下,尽量提高扩展被逆向复刻的门槛。
+🌐 **English** | [简体中文](https://github.com/TikyZ/extshield/blob/main/README.zh-CN.md)
+
+> Raise the cost of reverse-engineering your extension — **without tripping Chrome Web Store review**.
 >
-> 激进压缩(esbuild)+ 属性改名(terser)+ WASM 下沉 + 上传前合规扫描,附带一个本地可视化打包器。
+> Aggressive minification (esbuild) + property mangling (terser) + WASM sinking + a pre-upload compliance scan, plus a local visual packer.
 
-## 目录
+## Contents
 
-- [作用](#作用)
-- [安装](#安装)
-- [使用](#使用)
-- [配置文件](#配置文件-extshieldconfigjs)
-- [可视化打包器(GUI)](#可视化打包器gui)
-- [目录结构](#目录结构)
-- [开发与测试](#开发与测试)
-- [CI 集成示例(GitHub Actions)](#ci-集成示例github-actions)
-- [隐私说明](#隐私说明)
-- [防范程度](#防范程度)
-- [免责声明](#免责声明)
-- [第三方依赖与许可](#第三方依赖与许可)
-- [许可证](#许可证)
+- [What it does](#what-it-does)
+- [Install](#install)
+- [Usage](#usage)
+- [Config file](#config-file-extshieldconfigjs)
+- [Visual packer (GUI)](#visual-packer-gui)
+- [Project layout](#project-layout)
+- [Development & tests](#development--tests)
+- [CI example (GitHub Actions)](#ci-example-github-actions)
+- [Privacy](#privacy)
+- [How much protection](#how-much-protection)
+- [Disclaimer](#disclaimer)
+- [Third-party dependencies & licenses](#third-party-dependencies--licenses)
+- [License](#license)
 
-## 作用
+## What it does
 
-Chrome Web Store 政策**明确禁止 obfuscation(混淆)**,但**允许 minification(压缩)**。
+The Chrome Web Store **explicitly bans obfuscation** but **allows minification**.
 
-| 手段 | 是否允许 | 说明 |
-|------|----------|------|
-| 去空白/注释、缩短变量名、合并文件 | ✅ 允许 | 这就是 minification |
-| 属性名改名(terser mangle) | ✅ 允许(需谨慎) | 更激进,可能破坏跨文件调用 |
-| 字符串加密 / 控制流平坦化 / `eval(解密代码)` | ❌ **禁止** | 直接判定为混淆,审核拒绝 |
+| Technique | Allowed | Notes |
+|-----------|---------|-------|
+| Stripping whitespace/comments, shortening identifiers, bundling | ✅ Yes | This is minification |
+| Property-name mangling (terser) | ✅ Yes (with care) | More aggressive; can break cross-file calls |
+| String encryption / control-flow flattening / `eval(decrypt(...))` | ❌ **Banned** | Treated as obfuscation — the review is rejected |
 
-真正能称得上"代码保护"的合规路径只有两条:
-1. **把核心逻辑下沉到服务端** —— 代码根本不进客户端(扩展只做请求+展示),他人拿不到;
-2. **把关键计算编译成 WASM** —— 代码在客户端,但天然难逆向,且不属于 JS 混淆。
+Only two compliant paths genuinely qualify as "code protection":
 
-两条性质不同:一条是"让他人拿不到代码",一条是"拿到了也难读"。
+1. **Move the core logic to the server** — the code never reaches the client (the extension only sends requests and renders results), so no one can obtain it.
+2. **Compile the critical computation into WASM** — the code does reach the client, but it is inherently hard to reverse, and it does not count as JS obfuscation.
 
-本工具解决的是第 0 步:用合规手段把 JS 压到"能读但很难读",并在上传前
-用 `verify` 自动拦住一切会踩红线的苗头——**避免你"阴差阳错"把违规代码传上去**。
+The two differ in nature: one keeps the code out of reach, the other makes it hard to read.
 
-## 安装
+This tool covers step 0: it squeezes your JS into "readable, but painful to read" using compliant techniques, and runs `verify` before upload to catch anything that smells like a red line — **so you never ship policy-violating code by accident**.
 
-环境要求:**Node.js ≥ 18**(用到 `fs.rmSync` 等较新 API;Windows / macOS / Linux 均可)。
+## Install
+
+Requirements: **Node.js ≥ 18** (it uses newer APIs such as `fs.rmSync`; Windows / macOS / Linux are all supported).
+
+```bash
+npm install -g extshield
+```
+
+Or, from a clone:
 
 ```bash
 cd extshield
-npm install        # 依赖:esbuild / terser / acorn / assemblyscript
+npm install        # deps: esbuild / terser / acorn / assemblyscript
 ```
 
-## 使用
+## Usage
 
-### 1) 加固(harden)
+> **Note:** the CLI prints its progress messages in Chinese. The GUI (see below) is available in **English and Chinese**, and defaults to English unless your browser language is Chinese.
+
+### 1) Harden (`harden`)
 
 ```bash
-# 用当前目录的 extshield.config.js
+# uses extshield.config.js from the current directory
 node bin/extshield.js harden
 
-# 指定目录 / 开启属性改名
+# explicit directories / enable property mangling
 node bin/extshield.js harden --src ./src --out ./dist --mangle-props
 ```
 
-做了什么:
-- 从 `manifest.json` 自动探测入口(background / content / popup / options);
-- 用 esbuild 做 bundle + 激进压缩(去空白、改名、tree-shaking、去 `console`/`debugger`、去注释);
-- 拷贝 manifest / html / css / 图片等静态资源;
-- 可选:terser 属性名改名(`--mangle-props`)。
+What it does:
 
-### 2) 合规扫描(verify)
+- auto-detects entry points from `manifest.json` (background / content / popup / options);
+- bundles and aggressively minifies with esbuild (whitespace, identifier renaming, tree-shaking, `console`/`debugger` removal, comment stripping);
+- copies static assets — manifest, HTML, CSS, images;
+- optionally renames property names with terser (`--mangle-props`).
+
+### 2) Compliance scan (`verify`)
 
 ```bash
 node bin/extshield.js verify --dir ./dist
-node bin/extshield.js verify --dir ./dist --strict   # CI 卡口:中等风险也判不通过
+node bin/extshield.js verify --dir ./dist --strict   # CI gate: medium risk also fails
 ```
 
-会扫描产物,识别这些**高危/中等**模式并报告:
-`eval()`、`new Function()`、`setTimeout` 传字符串、`atob/btoa` 解密链、
-`fromCharCode` 解码、长 base64 字符串表、`_0x` 混淆器变量名、控制流平坦化、
-`constructor.constructor` 逃逸、`sourceMappingURL` 残留、远程代码加载等。
+It scans the output and reports **high / medium** risk patterns such as:
+`eval()`, `new Function()`, string passed to `setTimeout`, `atob`/`btoa` decrypt chains,
+`fromCharCode` decoding, long base64 string tables, `_0x` obfuscator identifiers, control-flow
+flattening, `constructor.constructor` escapes, leftover `sourceMappingURL`, remote code loading, and more.
 
-`verify` 退出码:通过 `0`,存在高危项 `1`(strict 下含中等项)。可直接接 CI。
+Exit codes: `0` for pass, `1` when high-risk items are present (or medium-risk items under `--strict`). Ready to drop into CI.
 
-### 3) 一键演示(demo)
+### 3) One-shot demo (`demo`)
 
 ```bash
 node bin/extshield.js demo
 ```
 
-用内置 `sample/` 扩展执行一遍 harden + verify,验证工具是否可用。
+Runs harden + verify against the bundled `sample/` extension to confirm the tool works.
 
-加 `--wasm` 可一并查看 WASM 下沉的效果:
+Add `--wasm` to also see the WASM sinking in action:
 
 ```bash
 node bin/extshield.js demo --wasm
 ```
 
-### 4) WASM 下沉(--wasm)
+### 4) WASM sinking (`--wasm`)
 
-把"纯计算"的函数编译进 WebAssembly。产物里是 wasm 字节码,想读懂需先反汇编 ——
-复刻门槛明显高于纯 JS。它是 Chrome 政策允许的(属于编译产物,而非加密),审核能过。
+Compiles "pure computation" functions into WebAssembly. The output contains wasm bytecode, which
+must be disassembled before it can be read — a noticeably higher bar than plain JS. This is allowed by
+Chrome policy (it is a compilation artifact, not encryption), so it passes review.
 
-下沉的同时,工具会把 wasm 里的**函数导出名抹成 `f0` / `f1`**:否则产物里会原样写着
-`(export "isSimilarUrl" ...)`,等于白送逆向者一套"哪个函数值钱"的路标。抹名不影响任何
-功能 —— `memory`、`__new` 等运行时接口会原样保留,只是不再暴露你自己的函数名。
+While sinking, the tool also **erases the wasm function export names down to `f0` / `f1`**: otherwise the
+artifact would literally contain `(export "isSimilarUrl" ...)`, handing a reverse engineer a ready-made
+map of "which function is worth looking at". Erasing the names changes no behavior — runtime interfaces
+such as `memory` and `__new` keep their names; only your own function names stop leaking.
 
 ```bash
-# 自动下沉:由工具扫描你的源码,挑出适合的函数
+# auto sinking: the tool scans your source and picks suitable functions
 node bin/extshield.js harden --src ./src --out ./dist --wasm
 
-# 手动下沉:使用你自己编写的 core.ts(优先级更高)
+# manual sinking: use your own core.ts (takes priority)
 node bin/extshield.js harden --src ./src --out ./dist --wasm --wasm-core ./core.ts
 ```
 
-两种方式的区别:
+How the two modes differ:
 
-| | 自动下沉(默认) | 手动下沉(`--wasm-core`) |
+| | Auto sinking (default) | Manual sinking (`--wasm-core`) |
 |---|---|---|
-| 你要做什么 | 无需任何操作 | 自行编写 `core.ts` |
-| 挑哪些函数 | 工具按规则扫描:只做数值运算、不涉及浏览器 API 的 | 由你决定 |
-| 产物形态 | **wasm 以 base64 内联进 JS,同步调用** | **同样是内联**(不产出 `core.wasm` / loader) |
-| 要不要改 manifest | 无需修改 | 无需修改(但工具会自动补上 CSP 放行,见下) |
-| 调用点 | 无需改动 | 无需改动(同名函数自动替换) |
-| 适合 | 想快速见效 / 不想接触 wasm | 想把核心算法掌握在自己手中 |
+| What you do | Nothing | Write your own `core.ts` |
+| Which functions | The tool scans for numeric-only, browser-API-free functions | You decide |
+| Output shape | **wasm inlined into JS as base64, called synchronously** | **Also inlined** (no `core.wasm` / loader) |
+| manifest changes | None | None (the tool adds the required CSP allowance — see below) |
+| Call sites | No changes | No changes (same-named functions are replaced) |
+| Good for | Quick wins / staying away from wasm | Keeping the core algorithm under your control |
 
-> 手动下沉以前会产出独立的 `core.wasm` + `wasm-loader.js`(需要 `web_accessible_resources`、
-> 调用点还得改成 `await`)。现在改成**和自动下沉一样内联**:同步实例化,调用点无需改动,
-> 也不会多出可在 `chrome-extension://` 直接下载的 wasm 文件。
+> Manual sinking used to emit a standalone `core.wasm` plus a `wasm-loader.js` (requiring
+> `web_accessible_resources`, and call sites had to become `await`). It is now **inlined exactly like auto
+> sinking**: synchronous instantiation, no call-site changes, and no wasm file that can be downloaded
+> directly from `chrome-extension://`.
 
-### ⚠️ 内联 wasm 之后,必须放行 CSP(必读)
+### ⚠️ Inlined wasm requires a CSP allowance (read this)
 
-这是实测遇到过的问题:MV3 扩展页默认 CSP 是 `script-src 'self'`,而**编译 WebAssembly 被
-CSP 当成代码求值**,于是内联进 `popup` / `service worker` 的 wasm 会被直接拦下,报:
+This was hit in practice: the default MV3 extension-page CSP is `script-src 'self'`, and **compiling
+WebAssembly counts as code evaluation**, so wasm inlined into a `popup` / service worker is blocked outright:
 
 ```
 CompileError: WebAssembly.Module(): ... violates the following CSP directive: "script-src 'self'"
 ```
 
-工具现在会**自动补上**这段(只追加、不覆盖你原有的指令,重复执行不会重复改写):
+The tool now **adds this automatically** (appending only — your existing directives are preserved, and
+repeated runs do not rewrite it):
 
 ```json
 "content_security_policy": {
@@ -149,158 +164,178 @@ CompileError: WebAssembly.Module(): ... violates the following CSP directive: "s
 }
 ```
 
-三条硬约束(已核对 Chrome 官方文档):
+Three hard constraints (verified against the official Chrome docs):
 
-- `script-src` / `object-src` / `worker-src` **只允许** `self` / `none` / `wasm-unsafe-eval`。
-  写 `'unsafe-eval'` 会让扩展**安装直接失败**,绝不可为图省事而加上。
-- `'wasm-unsafe-eval'` 只放行 wasm、不放行 `eval`,Chrome 商店接受。
-- 用的是**隔离世界**的 `content script`?无需处理 CSP —— Chrome 给隔离世界的默认 CSP
-  **本来就带** `'wasm-unsafe-eval'`,`script-src 'self' 'wasm-unsafe-eval' ...`,wasm 能正常跑。
-  但显式写了 `"world": "MAIN"` 的 content script 会注入网页主世界,**套用网页自己的 CSP**,
-  严格站点会拦掉 wasm —— 所以工具**只把这类文件排除在下沉之外**,隔离世界的照常下沉。
-  (用 `chrome.scripting.executeScript({world:'MAIN'})` 动态注入的脚本不在 manifest 里,
-  工具看不到,需要自行避开。)
+- `script-src` / `object-src` / `worker-src` allow **only** `self`, `none` and `wasm-unsafe-eval`.
+  Writing `'unsafe-eval'` makes the extension **fail to install** — never add it for convenience.
+- `'wasm-unsafe-eval'` allows wasm without allowing `eval`; the Chrome Web Store accepts it.
+- Using an **isolated-world** `content script`? No CSP work needed — Chrome's default CSP for isolated
+  worlds **already includes** `'wasm-unsafe-eval'` (`script-src 'self' 'wasm-unsafe-eval' ...`), so wasm runs
+  fine. But a content script that explicitly sets `"world": "MAIN"` is injected into the page's main world,
+  where **the page's own CSP applies** — strict sites will block wasm. The tool therefore **excludes only
+  those files from sinking** and sinks isolated-world scripts as usual. (Scripts injected dynamically via
+  `chrome.scripting.executeScript({world:'MAIN'})` are not in the manifest, so the tool cannot see them —
+  avoid wasm there yourself.)
 
-参考:<https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts>
+Reference: <https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts>
 
-几个要提前知道的点:
+A few things worth knowing up front:
 
-- **自动下沉不会改动你的源码**。它会先把源码复制一份到临时目录,在副本上修改,
-  产物从副本打包;你的工程目录不会被改动。如需保留副本检查,加 `--keep-stage`。
-- **不是所有函数都能沉**。涉及 `chrome.*` / `document` / `fetch`,或者用了
-  字符串、数组、对象的函数会被跳过 —— 这些无法在 wasm 里运行。跳过时工具会
-  逐个打印跳过原因,不会静默忽略。
-- **没有可下沉的函数时,不会用示例 wasm 顶替**。工具会明确说明扫描了多少个
-  函数、为什么一个都没有入选,产物里不会有 wasm —— 宁可如实报告"未下沉",也不会制造
-  "包里有 core.wasm 就等于已受保护"的错觉(这是早期版本遇到过的问题)。
-- **它只对"有纯计算逻辑"的扩展有用**。如果你的插件主要是 UI 和 DOM 操作
-  (像绝大多数弹窗类插件),可能一个函数都无法下沉 —— 这属于正常情况,
-  此时起作用的只有压缩 + 合规扫描,不要指望 WASM。
-- 想让更多函数可下沉,就把"纯计算"部分拆成独立函数,避免与 DOM / 存储操作混写。
+- **Auto sinking never modifies your source.** It copies the source to a temp directory, edits the copy, and
+  packs from that copy — your project directory is untouched. Add `--keep-stage` to keep the copy for inspection.
+- **Not every function can be sunk.** Functions that touch `chrome.*` / `document` / `fetch`, or that use
+  strings, arrays or objects, are skipped — those cannot run inside wasm. When it skips a function, the tool
+  prints the reason; it never silently ignores them.
+- **When no function qualifies, the tool does not substitute a built-in sample wasm.** The report states how many
+  functions were scanned and why none of them qualified, and the package contains no wasm. This is intended to
+  avoid the misconception that "a package containing core.wasm is therefore protected".
+- **It only helps extensions that have pure computation logic.** If your extension is mostly UI and DOM work
+  (as most popup extensions are), possibly no function can be sunk — that is normal, and in that case only
+  minification + the compliance scan are doing anything. Do not count on WASM.
+- To sink more functions, split the "pure computation" parts into standalone functions, separate from DOM / storage code.
 
-配置文件里也可以开启:`wasm: true` / `wasmCore: './core.ts'`。
+You can also enable it in the config file: `wasm: true` / `wasmCore: './core.ts'`.
 
-## 配置文件 `extshield.config.js`
+## Config file `extshield.config.js`
 
-放到项目根目录即可被自动读取,字段全可选,见 `templates/extshield.config.js`。
+Drop it in your project root and it is picked up automatically. Every field is optional — see
+`templates/extshield.config.js`.
 
-## 防范程度
+## How much protection
 
-- ✅ **可逆但费力**:minify + 改名后,源码逻辑仍在,只是变量名变成 `a/b/c`、
-  结构被打平。逆向者需要额外的时间成本,但无法 100% 阻挡有决心的逆向者。
-- 🧱 **成本更高,但同样可逆**:`--wasm` 把纯计算函数编译成 wasm 字节码,并抹掉函数
-  导出名(不再出现 `(export "isSimilarUrl" ...)` 这种一读就懂的路标)。经实测
-  (binaryen 反汇编):wasm **不是加密** —— 函数体、常量、控制流仍可还原,只是读起来
-  远比 JS 费劲。定位是抬高成本,不是封锁。
-  CLI 加 `--wasm` 即可(默认按规则自动下沉,也可用 `--wasm-core` 指定自己的 `core.ts`);
-  GUI 里勾 WASM 是同一套逻辑(CLI / GUI 共用 `src/wasm-sink.js`)。
-  `wasm-template/` 另有一份**独立**的 AssemblyScript 示例 + 编译脚本 + loader,
-  适合希望手工走传统"单独 `core.wasm` 文件"路线的人,和工具的内联方案互不影响。
-- 🚫 **客户端不会有"不可逆"**:代码要在客户端跑,就必须能被读、被分析。加密 + 运行时
-  解密属于 MV3 明文禁止的混淆手段,本工具**刻意不做**。
-- 🔒 **唯一真正"拿不到"的路**:核心算法**不下发到客户端**,改由服务端 API 计算。
-  代价是服务器成本、必须联网、而且要把用户数据传出去 —— 所以它**只适用于本来就该在
-  服务端的逻辑**(授权校验、云端数据、需要密钥的调用);读 DOM / 改页面这类纯前端功能
-  天生沉不下去。这里列出来是为了讲清边界,不是建议所有项目都这么做。
-- ❌ **不提供**:字符串加密、控制流平坦化、反调试——这些是政策明文禁止的,本工具
-  **刻意不做**,因为那会导致上架失败。
+- ✅ **Reversible, but laborious**: after minification and renaming the logic is still there — identifiers
+  become `a`/`b`/`c` and the structure is flattened. A reverse engineer needs extra time, but a determined
+  one is not stopped 100%.
+- 🧱 **Costlier, still reversible**: `--wasm` compiles pure-computation functions into wasm bytecode and
+  erases the function export names (no more `(export "isSimilarUrl" ...)`, which reads like a signpost).
+  As measured (disassembled with binaryen): wasm **is not encryption** — function bodies, constants and
+  control flow can still be recovered, it is simply far more tedious to read than JS. The goal is raising
+  cost, not sealing things off.
+  Enable it on the CLI with `--wasm` (auto sinking by rules, or `--wasm-core` to supply your own `core.ts`);
+  the GUI checkbox runs the same logic (the CLI and GUI share `src/wasm-sink.js`).
+  `wasm-template/` also ships a **separate** AssemblyScript example with a build script and loader, for
+  people who prefer the classic standalone `core.wasm` route; it is independent of the tool's inlining approach.
+- 🚫 **Nothing is irreversible on the client**: code that must run on the client must be readable and
+  analyzable. Encryption plus runtime decryption is obfuscation explicitly banned by MV3 — this tool
+  **deliberately does not do it**.
+- 🔒 **The only genuinely unreachable path**: keep the core algorithm **off the client** and compute it in a
+  server API. The cost is server bills, mandatory connectivity, and sending user data off-device — so it fits
+  **only logic that belongs on a server anyway** (license checks, cloud data, calls that need a secret). Purely
+  front-end work such as reading the DOM or rewriting pages can never be moved. This is listed to draw the
+  boundary, not to recommend it for every project.
+- ❌ **Not provided**: string encryption, control-flow flattening, anti-debugging — all explicitly banned by
+  policy, and **deliberately omitted** here, because they would get your listing rejected.
 
-## CI 集成示例(GitHub Actions)
+## CI example (GitHub Actions)
 
 ```yaml
-- name: 加固并校验
+- name: Harden and verify
   run: |
     npm ci
     node bin/extshield.js harden
     node bin/extshield.js verify --dir ./dist --strict
 ```
 
-## 可视化打包器(GUI)
+## Visual packer (GUI)
 
-不想敲命令?进 `gui/` 启动一个本地 Web 应用:选文件夹 → 选方式 → 选保存位置 → 一键合规打包,
-打包完成后同时在页面上给出合规扫描报告。
+Prefer clicking to typing? Start a local web app from `gui/`: pick a folder → pick a mode → pick a save
+location → pack it compliantly in one click, with the compliance report rendered on the page afterwards.
 
 ```bash
-node gui/server.js   # 打开 http://localhost:4173
+node gui/server.js   # then open http://localhost:4173
 ```
 
-两种方式(minify / wasm)都做成可视化按钮,详见 `gui/README.md`。
+Both modes (minify / wasm) are available as buttons; see `gui/README.md` for details.
 
-服务只绑定 `127.0.0.1`,并校验 Host / Origin / `Sec-Fetch-Site`,阻断 DNS rebinding 与跨站请求。
+The interface is available in **English and Chinese**. It follows your browser language — Chinese browsers get
+Chinese, everything else gets English — remembers your choice, and can be forced with
+`http://localhost:4173/?lang=zh` (or `?lang=en`). Switch it any time with the `中文 / EN` control in the top-right
+corner.
 
-## 目录结构
+The server binds to `127.0.0.1` only and validates Host / Origin / `Sec-Fetch-Site`, blocking DNS rebinding
+and cross-site requests.
+
+## Project layout
 
 ```
 extshield/
-├── bin/extshield.js        CLI 入口(harden / verify / demo)
+├── bin/extshield.js        CLI entry (harden / verify / demo)
 ├── src/
-│   ├── harden.js           esbuild 打包 + 激进压缩(+ 可选 terser 属性改名)
-│   ├── verify.js           scan() 纯函数扫描 + run() CLI 包装(退出码)
-│   ├── rules.js            合规规则库(高危 / 中等 / 提示)
-│   ├── config.js           DEFAULTS + 从 manifest 自动探测入口
-│   ├── auto-sink.js        自动下沉引擎(acorn 扫 AST 选函数 → AssemblyScript)
-│   ├── manual-sink.js      手动下沉(编译你的 core.ts,替换同名函数)
-│   ├── wasm-sink.js        CLI / GUI 共用的下沉编排(prepare / finalize)
-│   ├── zip.js              纯 Node 打 zip(不依赖外部命令)
-│   └── asc.js / runtime-gen.js / wasm-loader-gen.js   编译与运行时生成
-├── gui/                    本地可视化打包器(server.js + public/)
-├── templates/              配置文件模板
-├── wasm-template/          独立的 AssemblyScript 示例(可选,见下)
-├── sample/                 内置示例扩展(demo 用)
-└── test/e2e-wasm.js        端到端回归(npm test)
+│   ├── harden.js           esbuild bundling + aggressive minify (+ optional terser property mangling)
+│   ├── verify.js           scan() pure-function scanner + run() CLI wrapper (exit codes)
+│   ├── rules.js            compliance rule set (high / medium / info)
+│   ├── config.js           DEFAULTS + entry detection from manifest
+│   ├── auto-sink.js        auto-sink engine (acorn AST scan → AssemblyScript)
+│   ├── manual-sink.js      manual sink (compiles your core.ts, replaces same-named functions)
+│   ├── wasm-sink.js        shared sinking orchestration for CLI / GUI (prepare / finalize)
+│   ├── wasm-rename.js      erases wasm function export names (runtime interfaces preserved)
+│   ├── zip.js              pure-Node zip (no external commands)
+│   └── asc.js / runtime-gen.js / wasm-loader-gen.js   compiler & runtime generation
+├── gui/                    local visual packer (server.js + public/, bilingual UI)
+├── templates/              config file templates
+├── wasm-template/          standalone AssemblyScript example (optional, see below)
+├── sample/                 bundled sample extension (used by demo)
+└── test/e2e-wasm.js        end-to-end regression (npm test)
 ```
 
-> `wasm-template/` 是给"想自己写 wasm、不使用工具的自动下沉"的人准备的**独立模板**:
-> 它编译出单独的 `core.wasm` + `wasm-loader.js`(需要 `web_accessible_resources`),
-> 和本工具的**内联**方案不同,按需取用。
+> `wasm-template/` is a **standalone template** for people who want to write wasm themselves instead of
+> using the tool's auto sinking: it produces a separate `core.wasm` + `wasm-loader.js` (requiring
+> `web_accessible_resources`). It differs from this tool's **inlining** approach — use whichever fits.
 
-## 开发与测试
+## Development & tests
 
 ```bash
-npm test            # 端到端回归:自动下沉 / 手动下沉 / 字符串语义 / CSP / 边界安全
+npm test            # end-to-end: auto sink / manual sink / string semantics / CSP / boundary safety
 ```
 
-`test/e2e-wasm.js` 会实际启动一次 GUI 打包服务(随机端口)、实际编译一次 wasm、再解出产物并实际运行,验证"下沉后与原 JS 输出一致"——而非仅检查文件是否存在。
+`test/e2e-wasm.js` actually starts the GUI packing service (on a random port), actually compiles a wasm
+module, then extracts and actually runs the result to verify that "the sunk version matches the original JS
+output" — rather than merely checking that files exist.
 
-## 隐私说明
+## Privacy
 
-- **GUI 模式**:你上传的扩展源码会临时写入 `gui/.work/<任务ID>/` 用于处理,
-  **打包完成后立即删除**,不在磁盘留存;服务启动时也会清空一次 `gui/.work/`,
-  兜底清理上次异常退出(强杀 / 断电)留下的副本。
-- **CLI 模式**:全程只读写你指定的 `--src` / `--out` 目录;开启 `--wasm` 时会额外在系统
-  临时目录建一份源码副本(下沉必须改文件,不能在你的工程目录中就地修改),运行结束后自动删除,
-  加 `--keep-stage` 可保留下来检查。
-- 两种模式都**不联网**,不会把源码发往任何外部服务器。
-- 建议:不要把 `gui/.work/` 纳入自己的备份或同步范围。
+- **GUI mode**: the extension source you upload is written temporarily to `gui/.work/<task-id>/` for
+  processing, and **deleted immediately after packing** — nothing is left on disk. On startup the service
+  also wipes `gui/.work/` once, to clean up copies left behind by an abnormal exit (force-kill / power loss).
+- **CLI mode**: it only reads and writes the `--src` / `--out` directories you specify. With `--wasm` it
+  additionally creates one copy of your source in the system temp directory (sinking must edit files, and it
+  never edits your project in place), which is removed when the run ends. Use `--keep-stage` to keep it.
+- Neither mode talks to the network; your source is never sent to any external server.
+- Tip: do not include `gui/.work/` in your backups or file-sync scope.
 
-## 免责声明
+## Disclaimer
 
-- 本工具只做 Chrome Web Store 政策**允许**的压缩与 WASM 下沉,**不提供**任何被禁止的
-  混淆手段。能否通过审核最终由 Chrome Web Store 判定,本工具不对此作保证。
-- 压缩 / 属性改名可能**破坏**依赖原变量名或属性名的代码(跨文件调用、外部 API、
-  消息键等)。请先在小范围验证,并用 `verify` 复检。
-- 产物请自行做好版本管理与备份,使用本工具产生的一切后果由使用者自负。
+- This tool only performs minification and WASM sinking that Chrome Web Store policy **allows**; it ships
+  **none** of the banned obfuscation techniques. Whether your listing passes review is ultimately decided by
+  the Chrome Web Store, and this tool makes no guarantee about it.
+- Minification and property mangling can **break** code that depends on original identifier or property
+  names (cross-file calls, external APIs, message keys, …). Verify on a small scale first and re-check with `verify`.
+- Keep your own version control and backups of the output. Any consequences of using this tool are the user's own.
 
-## 第三方依赖与许可
+## Third-party dependencies & licenses
 
-本项目自身以 MIT 发布;用到的第三方组件共 16 个(直接依赖 4 个、传递依赖 12 个),
-**全部是宽松许可(MIT / BSD-2-Clause / BSD-3-Clause / Apache-2.0),不含 GPL / AGPL / LGPL
-等传染性许可**,因此不影响本项目继续以 MIT 发布,也不影响你对自己产出的扩展包自行授权。
+This project itself is released under MIT. It uses 16 third-party components (4 direct, 12 transitive),
+**all under permissive licenses (MIT / BSD-2-Clause / BSD-3-Clause / Apache-2.0) — no GPL / AGPL / LGPL or
+other copyleft licenses** — so nothing prevents this project from staying MIT, and nothing restricts how you
+license the extension packages you produce.
 
-各组件的版本、许可与版权归属见 [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md) —— 它由
-`scripts/gen-notices.js` 直接从实际安装的依赖中生成(不联网、不推测),依赖变动后运行
-`npm run notices` 重新生成。
+Versions, licenses and copyright holders for each component are in
+[THIRD-PARTY-NOTICES.md](https://github.com/TikyZ/extshield/blob/main/THIRD-PARTY-NOTICES.md). That file is generated by `scripts/gen-notices.js`
+directly from the installed dependencies (offline, no guesswork); run `npm run notices` to regenerate it
+after dependency changes.
 
-三点值得留意:
+Three things worth noting:
 
-- **只是通过 npm 安装使用**:无需额外动作。每个依赖包自带自己的 `LICENSE`,由它自己满足
-  "保留版权声明"的义务;声明文件的作用是可读与审计(企业内部做开源许可审查时常被要求提供)。
-- **如果你把依赖打包进发布物**(离线包 / 单文件 / 免安装发行):则**必须**同时附上各组件的
-  许可全文,Apache-2.0 组件还需保留其 `NOTICE`。声明文件末尾给出了可直接使用的生成命令。
-- **启用 `--wasm` 时**:产出的 wasm 二进制里内联了 AssemblyScript 的运行时(它派生自
-  TypeScript / Binaryen / musl libc / V8 / Arm Optimized Routines),按 Apache-2.0 建议随产物
-  保留其归属声明 —— 摘要见声明文件第四节。
+- **Using it as an npm dependency only**: no extra action needed. Each dependency ships its own `LICENSE`,
+  which satisfies its own "retain the copyright notice" obligation; the notices file exists for readability
+  and auditing (often requested during corporate open-source license review).
+- **If you bundle the dependencies into what you ship** (offline bundle / single file / portable release):
+  you **must** include the full license text of each component, and Apache-2.0 components additionally need
+  their `NOTICE` retained. The end of the notices file gives ready-to-use commands.
+- **When `--wasm` is enabled**: the produced wasm binary inlines the AssemblyScript runtime (which derives
+  from TypeScript / Binaryen / musl libc / V8 / Arm Optimized Routines). Per Apache-2.0, keep its attribution
+  with your artifact — see section 4 of the notices file.
 
-## 许可证
+## License
 
-本项目采用 MIT 许可证,详见 [LICENSE](./LICENSE)。
+MIT — see [LICENSE](https://github.com/TikyZ/extshield/blob/main/LICENSE).

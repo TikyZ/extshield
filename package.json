@@ -1,7 +1,7 @@
 {
   "name": "extshield",
-  "version": "1.0.0",
-  "description": "Chrome 扩展压缩合规加固工具:esbuild 激进压缩 + terser 属性改名 + 合规扫描,在不过审核红线的前提下提高逆向门槛",
+  "version": "1.0.1",
+  "description": "Minify and harden Chrome extensions without breaking Web Store policy — esbuild minification, terser property mangling, WASM sinking and a pre-upload compliance scan.",
   "bin": {
     "extshield": "bin/extshield.js"
   },
@@ -18,9 +18,23 @@
   },
   "keywords": [
     "chrome-extension",
+    "chrome-web-store",
+    "browser-extension",
+    "extension",
+    "manifest-v3",
+    "mv3",
     "minify",
+    "minifier",
+    "obfuscation",
     "obfuscation-policy",
-    "web-store-compliance"
+    "web-store-compliance",
+    "code-protection",
+    "packager",
+    "esbuild",
+    "terser",
+    "wasm",
+    "webassembly",
+    "assemblyscript"
   ],
   "author": "TikyZ",
   "license": "MIT",
@@ -41,6 +55,7 @@
     "sample/",
     "gui/",
     "README.md",
+    "README.zh-CN.md",
     "CHANGELOG.md",
     "THIRD-PARTY-NOTICES.md",
     "LICENSE"
