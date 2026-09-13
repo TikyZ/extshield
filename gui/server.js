@@ -315,7 +315,11 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && (url.pathname === '/favicon.ico' || url.pathname === '/favicon.svg')) {
       return serveStatic(res, 'favicon.svg');
     }
-    if (req.method === 'GET' && (url.pathname === '/app.js' || url.pathname === '/style.css')) {
+    // 前端静态资源白名单(新增资源要同步加进来,否则 404 —— 页面会静默失效)
+    if (
+      req.method === 'GET' &&
+      (url.pathname === '/app.js' || url.pathname === '/i18n.js' || url.pathname === '/style.css')
+    ) {
       return serveStatic(res, url.pathname.slice(1));
     }
     if (req.method === 'POST' && url.pathname === '/api/pack') {

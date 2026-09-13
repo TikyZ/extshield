@@ -134,10 +134,20 @@ body {
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.10);
   background: #f8faff;
 }
-.method-title { font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+/* 标题右侧留出右上角 radio 的位置 —— 否则较长的英文标题会与它重叠;
+   不用 flex,让「推荐」标签跟随文字流,不再挤占标题宽度 */
+.method-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+  padding-right: 32px;
+  line-height: 1.4;
+}
 .method-desc { font-size: 13px; color: var(--muted); }
 .method-note { font-size: 12px; color: var(--warn); margin-top: 6px; }
 .rec {
+  display: inline-block;
+  margin-left: 8px;
+  vertical-align: 1px;
   font-size: 11px;
   font-weight: 600;
   color: var(--brand-ink);
@@ -307,3 +317,45 @@ body {
 .rmsg { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
 
 .hidden { display: none; }
+
+/* ── 右上角语言切换 ── */
+.lang-switch {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 10;
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+}
+.lang-switch button {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.lang-switch button:hover { color: var(--brand-ink); background: #eef3ff; }
+.lang-switch button.active {
+  background: var(--brand);
+  color: #fff;
+}
+.lang-switch button:focus-visible {
+  outline: 2px solid var(--brand-ink);
+  outline-offset: 1px;
+}
+
+/* 视口不够宽时,右上角按钮会压到标题区 —— 让内容整体下移一点 */
+@media (max-width: 1000px) {
+  .wrap { padding-top: 72px; }
+}

@@ -8,6 +8,8 @@ const progress = document.getElementById('progress');
 const result = document.getElementById('result');
 
 let selectedFiles = []; // { path, data(base64) }
+// 已选文件夹的信息快照 —— 切换语言时据此重新渲染,而不是留下另一种语言的残句
+let folderState = null; // { count, hasManifest, entries, parseFailed }
 
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({
@@ -39,8 +41,8 @@ function renderReport(report) {
   if (report.noJs) {
     box.className = 'report warn';
     box.innerHTML =
-      '<div class="rtitle">⚠️ 合规扫描未执行</div>' +
-      '<div class="rbody">' + esc(report.error || '产物里没有找到 .js 文件') + '</div>';
+      '<div class="rtitle">' + I18N.t('report.nojs.title') + '</div>' +
+      '<div class="rbody">' + esc(report.error || I18N.t('report.nojs.body')) + '</div>';
     box.classList.remove('hidden');
     return;
   }
@@ -48,14 +50,20 @@ function renderReport(report) {
   const c = report.counts || { high: 0, medium: 0, info: 0 };
   let html =
     '<div class="rtitle">' +
-    (report.passed ? '✅ 合规扫描通过' : '❌ 合规扫描发现风险') +
+    (report.passed ? I18N.t('report.passed') : I18N.t('report.failed')) +
     '</div>';
   html +=
-    '<div class="rsum">扫描 ' + (report.fileCount || 0) + ' 个 js' +
-    (report.inlineCount ? ' + ' + report.inlineCount + ' 段内联脚本' : '') +
-    ' · 高危 <b class="' + (c.high ? 'sev-high' : '') + '">' + c.high + '</b>' +
-    ' / 中等 <b class="' + (c.medium ? 'sev-mid' : '') + '">' + c.medium + '</b>' +
-    ' / 提示 ' + c.info + '</div>';
+    '<div class="rsum">' +
+    I18N.t('report.summary', {
+      files: report.fileCount || 0,
+      inlineMore: report.inlineCount ? I18N.t('report.inlineMore', { n: report.inlineCount }) : '',
+      hcls: c.high ? 'sev-high' : '',
+      high: c.high,
+      mcls: c.medium ? 'sev-mid' : '',
+      medium: c.medium,
+      info: c.info,
+    }) +
+    '</div>';
 
   // WASM 来源:明确告诉用户打进去的是他自己的逻辑还是内置示例。
   // 免得出现"以为沉了自己的核心代码,实际是 demo"这种误导。
@@ -63,54 +71,52 @@ function renderReport(report) {
   if (w.enabled) {
     const srcText =
       w.source === 'auto'
-        ? '🤖 <b>自动下沉</b>:从你的代码中扫描出 ' +
-          (w.sunk ? w.sunk.length : 0) +
-          ' 个纯计算函数,已编译成 wasm 并内联(原实现已替换)'
+        ? I18N.t('report.wasm.auto', { n: w.sunk ? w.sunk.length : 0 })
         : w.source === 'user-core'
-        ? '✅ 来自你自己的 <b>core.ts</b>(已编译进 core.wasm)'
+        ? I18N.t('report.wasm.userCore')
         : w.source === 'compile-failed'
-        ? '⚠️ 你的 core.ts <b>编译失败</b>,本次没有下沉任何函数'
+        ? I18N.t('report.wasm.compileFailed')
         : w.source === 'auto-failed'
-        ? '⚠️ <b>自动下沉失败</b>,本次没有下沉任何函数'
-        : '⚠️ <b>本次没有下沉任何函数</b>:共扫描 ' +
-          (w.scanned || 0) +
-          ' 个,均不适合(涉及浏览器 / 扩展 API,或非纯数值运算)。' +
-          '<b>包里不会有 wasm</b>,你的逻辑仍在 JS 里 —— 靠压缩 + 合规扫描保护。' +
-          '想真正下沉:把核心算法拆成只做数值计算的独立函数,或编写 core.ts 放到插件根目录。';
-    html += '<div class="rsum">WASM 下沉:' + srcText;
+        ? I18N.t('report.wasm.autoFailed')
+        : I18N.t('report.wasm.none', { n: w.scanned || 0 });
+    html += '<div class="rsum">' + I18N.t('report.wasm.line', { src: srcText });
     if (w.sunk && w.sunk.length) {
-      html += ' · 已下沉:' + esc(w.sunk.join(', '));
+      html += I18N.t('report.wasm.sunkLabel', { names: esc(w.sunk.join(', ')) });
     }
     if (w.exports && w.exports.length && w.source !== 'auto') {
-      html += ' · 导出:' + esc(w.exports.join(', '));
+      html += I18N.t('report.wasm.exportsLabel', { names: esc(w.exports.join(', ')) });
     }
     if (w.skipped && w.skipped.length) {
       const names = w.skipped.slice(0, 4).map((s) => s.name).join(', ');
-      html +=
-        '<br><span style="opacity:.75">另有 ' +
-        w.skipped.length +
-        ' 个函数未下沉(涉及浏览器 / 扩展 API 或非数值运算):' +
-        esc(names) +
-        (w.skipped.length > 4 ? ' 等' : '') +
-        '</span>';
+      html += I18N.t('report.wasm.skippedMore', {
+        n: w.skipped.length,
+        names: esc(names),
+        etc: w.skipped.length > 4 ? I18N.t('report.wasm.etc') : '',
+      });
     }
     html += '</div>';
   }
 
   const hits = report.hits || [];
   if (!hits.length) {
-    html += '<div class="rbody">未检测到会触发商店审核红线的混淆特征,可以打包上传。</div>';
+    html += '<div class="rbody">' + I18N.t('report.clean') + '</div>';
   } else {
     const order = { high: 0, medium: 1, info: 2 };
     hits.sort((a, b) => (order[a.severity] ?? 9) - (order[b.severity] ?? 9));
     html += '<div class="rlist">';
     for (const h of hits) {
-      const tag = h.severity === 'high' ? '高危' : h.severity === 'medium' ? '中等' : '提示';
+      const tag = I18N.t(
+        h.severity === 'high'
+          ? 'report.sev.high'
+          : h.severity === 'medium'
+          ? 'report.sev.medium'
+          : 'report.sev.info'
+      );
       html +=
         '<div class="rhit ' + esc(h.severity) + '">' +
         '<div class="rh"><span class="rtag ' + esc(h.severity) + '">' + tag + '</span> ' +
         esc(h.name) + ' <span class="rrule">' + esc(h.rule) + '</span></div>' +
-        '<div class="rmeta">' + esc(h.file) + (h.line ? ' (行 ' + h.line + ')' : '') + '</div>' +
+        '<div class="rmeta">' + esc(h.file) + (h.line ? I18N.t('report.lineRef', { n: h.line }) : '') + '</div>' +
         (h.snippet ? '<div class="rsnip">' + esc(h.snippet) + '</div>' : '') +
         '<div class="rmsg">' + esc(h.message) + '</div>' +
         '</div>';
@@ -153,7 +159,7 @@ function pickSaveHandle(name) {
   return window
     .showSaveFilePicker({
       suggestedName: name,
-      types: [{ description: 'ZIP 压缩包', accept: { 'application/zip': ['.zip'] } }],
+      types: [{ description: I18N.t('picker.zipDesc'), accept: { 'application/zip': ['.zip'] } }],
     })
     .catch((e) => {
       if (e && e.name === 'AbortError') throw e; // 用户主动点了取消
@@ -194,12 +200,43 @@ async function readFile(file) {
   };
 }
 
+// 按当前语言渲染"已选文件夹"的提示;folderState 为空则回到初始文案。
+function renderFolderInfo() {
+  if (!folderState) {
+    folderLabel.textContent = I18N.t('step1.pick');
+    folderInfo.classList.add('hidden');
+    folderInfo.innerHTML = '';
+    packBtn.disabled = true;
+    return;
+  }
+
+  folderLabel.textContent = I18N.t('folder.selected', { n: folderState.count });
+
+  let info = I18N.t('folder.loaded', { n: folderState.count });
+  if (!folderState.hasManifest) {
+    info += I18N.t('folder.noManifest');
+  } else if (folderState.parseFailed) {
+    info += I18N.t('folder.parseFailed');
+  } else {
+    const list = folderState.entries.join(', ') || I18N.t('folder.none');
+    info += I18N.t('folder.entries', { list });
+  }
+  folderInfo.innerHTML = info;
+  folderInfo.classList.remove('hidden');
+  packBtn.disabled = !folderState.hasManifest;
+}
+
 folderInput.addEventListener('change', async () => {
   selectedFiles = [];
+  folderState = null;
   const files = Array.from(folderInput.files || []);
-  if (!files.length) return;
+  if (!files.length) {
+    renderFolderInfo();
+    return;
+  }
 
-  folderLabel.textContent = `已选择 ${files.length} 个文件`;
+  // 先给个即时反馈,读完文件后再按解析结果重渲染
+  folderLabel.textContent = I18N.t('folder.selected', { n: files.length });
   progress.classList.add('hidden');
   result.classList.add('hidden');
   hideReport();
@@ -210,17 +247,17 @@ folderInput.addEventListener('change', async () => {
   }
 
   // 尝试解析 manifest 显示信息
-  let info = `已载入 <b>${files.length}</b> 个文件。`;
   const manifestFile = files.find(
     (f) => (f.webkitRelativePath || f.name).replace(/.*\//, '') === 'manifest.json'
   );
+  let entries = [];
+  let parseFailed = false;
   if (manifestFile) {
     try {
       const m = JSON.parse(await manifestFile.text());
-      const ents = [];
       // 与 src/config.js 的 detectEntries 保持一致,别漏了 options 页。
       const push = (v) => {
-        if (typeof v === 'string' && v) ents.push(v.replace(/^\.\//, ''));
+        if (typeof v === 'string' && v) entries.push(v.replace(/^\.\//, ''));
       };
       if (m.background) {
         push(m.background.service_worker);
@@ -230,17 +267,18 @@ folderInput.addEventListener('change', async () => {
       if (m.action) push(m.action.default_popup);
       push(m.options_page);
       if (m.options_ui) push(m.options_ui.page);
-      info += ` 检测到入口文件: <b>${ents.join(', ') || '无'}</b>。`;
     } catch (e) {
-      info += ' (manifest.json 解析失败)';
+      parseFailed = true;
     }
-  } else {
-    info += ' <b style="color:#b91c1c">未找到 manifest.json</b>,将无法打包。';
   }
-  folderInfo.innerHTML = info;
-  folderInfo.classList.remove('hidden');
 
-  packBtn.disabled = !manifestFile;
+  folderState = {
+    count: files.length,
+    hasManifest: !!manifestFile,
+    entries,
+    parseFailed,
+  };
+  renderFolderInfo();
 });
 
 packBtn.addEventListener('click', async () => {
@@ -249,7 +287,7 @@ packBtn.addEventListener('click', async () => {
   const checked = document.querySelector('input[name="method"]:checked');
   if (!checked) {
     result.className = 'result err';
-    result.innerHTML = '❌ 请选择一种保护方式。';
+    result.innerHTML = I18N.t('pack.noMethod');
     result.classList.remove('hidden');
     return;
   }
@@ -264,7 +302,7 @@ packBtn.addEventListener('click', async () => {
   } catch (e) {
     // 用户在另存为窗口点了取消 → 不打包,直接结束
     result.className = 'result err';
-    result.innerHTML = '已取消,没有打包。';
+    result.innerHTML = I18N.t('pack.canceled');
     result.classList.remove('hidden');
     return;
   }
@@ -273,8 +311,8 @@ packBtn.addEventListener('click', async () => {
   result.classList.add('hidden');
   progress.classList.remove('hidden');
   progress.innerHTML =
-    '<span class="spin"></span>正在打包(' + checked.value + ')…' +
-    (handle ? '<div class="sub-prog">保存到:' + esc(handle.name) + '</div>' : '');
+    I18N.t('pack.running', { mode: checked.value }) +
+    (handle ? '<div class="sub-prog">' + I18N.t('pack.savingTo', { name: esc(handle.name) }) + '</div>' : '');
 
   try {
     const resp = await fetch('/api/pack', {
@@ -285,7 +323,7 @@ packBtn.addEventListener('click', async () => {
 
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
-      throw new Error(err.error || '服务端错误 ' + resp.status);
+      throw new Error(err.error || I18N.t('pack.serverError', { code: resp.status }));
     }
 
     const data = await resp.json();
@@ -300,17 +338,25 @@ packBtn.addEventListener('click', async () => {
     progress.classList.add('hidden');
     result.className = 'result ok';
     result.innerHTML = saved.picked
-      ? `✅ 打包完成,已保存到 <b>${esc(saved.name)}</b>。解压后即是可上传商店的扩展目录。`
-      : `✅ 打包完成,已下载 <b>${esc(saved.name)}</b>。当前浏览器不支持选位置弹窗,` +
-        `文件进了浏览器默认下载目录(Chrome 可在设置里打开「下载前询问每个文件的保存位置」)。`;
+      ? I18N.t('pack.savedTo', { name: esc(saved.name) })
+      : I18N.t('pack.downloaded', { name: esc(saved.name) });
 
     // 2) 展示合规扫描报告
     renderReport(data.report);
   } catch (e) {
     progress.classList.add('hidden');
     result.className = 'result err';
-    result.innerHTML = '❌ 打包失败:' + e.message;
+    result.innerHTML = I18N.t('pack.failed', { msg: esc(e.message) });
   } finally {
     packBtn.disabled = false;
   }
+});
+
+// 切换语言:i18n 已刷新静态文案,这里把动态区域按新语言重建,
+// 避免出现中英混排;旧语言的报告/结果直接收起,重新打包即可。
+I18N.onChange(() => {
+  progress.classList.add('hidden');
+  result.classList.add('hidden');
+  hideReport();
+  renderFolderInfo();
 });

@@ -1,19 +1,27 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="en" data-i18n-title="doc.title">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>extshield · 扩展压缩合规打包器</title>
+  <!-- 静态文案一律写成英文:默认语言是英文,这样首屏不会闪一下中文。
+       切到中文时由 i18n.js 按 data-i18n* 属性整棵刷新。 -->
+  <title>extshield · Extension Minifier &amp; Compliance Packer</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <!-- 右上角语言切换 -->
+  <div class="lang-switch" role="group" data-i18n-attr="aria-label:lang.aria">
+    <button type="button" data-lang-btn="zh" lang="zh-CN">中文</button>
+    <button type="button" data-lang-btn="en" lang="en">EN</button>
+  </div>
+
   <main class="wrap">
     <header class="hero">
       <div class="logo">🛡️</div>
       <div>
-        <h1>extshield 可视化打包器</h1>
-        <p class="sub">选插件文件夹 → 选保护方式 → 一键合规打包。只做压缩与 WASM 下沉,不做被商店禁止的混淆。</p>
+        <h1 data-i18n="hero.title">extshield Visual Packer</h1>
+        <p class="sub" data-i18n="hero.sub">Pick the extension folder → choose a protection mode → pack it compliantly in one click. Minification and WASM sinking only — no store-banned obfuscation.</p>
       </div>
     </header>
 
@@ -21,10 +29,10 @@
     <section class="card step">
       <div class="step-no">1</div>
       <div class="step-body">
-        <h2>选择插件文件夹</h2>
+        <h2 data-i18n="step1.title">Choose the extension folder</h2>
         <label class="picker">
           <input type="file" id="folder" webkitdirectory directory multiple />
-          <span id="folderLabel">点击选择扩展根目录(含 manifest.json)</span>
+          <span id="folderLabel" data-i18n="step1.pick">Click to select the extension root folder (containing manifest.json)</span>
         </label>
         <div id="folderInfo" class="info hidden"></div>
       </div>
@@ -34,28 +42,32 @@
     <section class="card step">
       <div class="step-no">2</div>
       <div class="step-body">
-        <h2>选择保护方式 <span class="step-hint">二选一</span></h2>
+        <h2>
+          <span data-i18n="step2.title">Choose a protection mode</span>
+          <span class="step-hint" data-i18n="step2.hint">pick one</span>
+        </h2>
         <div class="methods">
           <label class="method" data-method="minify">
             <input type="radio" name="method" value="minify" />
             <div class="method-inner">
-              <div class="method-title">激进压缩 (Minify)</div>
-              <div class="method-desc">esbuild 去空白/改名/去注释/去 console。合规,逆向需费力解读。轻量快速,是所有模式的基础。</div>
+              <div class="method-title" data-i18n="step2.minify.title">Aggressive minify</div>
+              <div class="method-desc" data-i18n="step2.minify.desc">esbuild strips whitespace, renames identifiers, drops comments and console calls. Compliant; reverse engineering still takes real effort. Fast and lightweight — the basis of every mode.</div>
             </div>
           </label>
 
           <label class="method" data-method="wasm">
             <input type="radio" name="method" value="wasm" checked />
             <div class="method-inner">
-              <div class="method-title">激进压缩 + WASM 下沉 <span class="rec">推荐</span></div>
-              <div class="method-desc">在压缩基础上,把核心逻辑编译成 WebAssembly 二进制,逆向需反汇编。合规,且复刻门槛更高。wasm 以 base64 内联进 JS,不产出可单独下载的 wasm 文件。</div>
-              <div class="method-note">把核心算法写成 core.ts 放进插件根目录即可现场编译;不写也行——工具会自动扫出适合下沉的纯计算函数。一个都挑不出时会如实告诉你,不会拿示例 wasm 充数。</div>
+              <div class="method-title" data-i18n-html="step2.wasm.title">Minify + WASM sinking <span class="rec">Recommended</span></div>
+              <div class="method-desc" data-i18n="step2.wasm.desc">On top of minification, core logic is compiled to a WebAssembly binary, which has to be disassembled to be reversed. Compliant, and much harder to replicate. The wasm is inlined into JS as base64 — no separately downloadable wasm file is produced.</div>
+              <div class="method-note" data-i18n="step2.wasm.note">Write your core algorithm as core.ts in the extension root and it is compiled on the spot; optional — the tool also scans for and selects pure computation functions suitable for sinking. If no function qualifies, the tool will state this explicitly.</div>
             </div>
           </label>
         </div>
 
         <label class="extra-toggle">
-          <input type="checkbox" id="mangleProps" /> 属性名也改名(更激进,可能破坏外部 API)——压缩阶段生效
+          <input type="checkbox" id="mangleProps" />
+          <span data-i18n="step2.mangle">Also mangle property names (more aggressive; may break external APIs) — applied at the minify stage</span>
         </label>
       </div>
     </section>
@@ -64,9 +76,9 @@
     <section class="card step">
       <div class="step-no">3</div>
       <div class="step-body">
-        <h2>开始打包</h2>
-        <p class="pack-hint">点击后会先弹出「另存为」窗口,你选好保存位置和文件名,再开始打包。</p>
-        <button id="packBtn" class="primary" disabled>开始打包</button>
+        <h2 data-i18n="step3.title">Start packing</h2>
+        <p class="pack-hint" data-i18n="step3.hint">Clicking opens a "Save as" dialog first — pick the location and filename, then packing begins.</p>
+        <button id="packBtn" class="primary" disabled data-i18n="step3.btn">Start packing</button>
         <div id="progress" class="progress hidden"></div>
         <div id="result" class="result hidden"></div>
       </div>
@@ -76,18 +88,21 @@
     <section class="card step">
       <div class="step-no">4</div>
       <div class="step-body">
-        <h2>合规扫描报告 <span class="step-hint">打包后自动生成</span></h2>
-        <div id="reportEmpty" class="info">打包完成后,这里会显示产物是否触碰 Chrome Web Store 审核红线(高危 / 中等 / 提示)。</div>
+        <h2>
+          <span data-i18n="step4.title">Compliance scan report</span>
+          <span class="step-hint" data-i18n="step4.hint">generated after packing</span>
+        </h2>
+        <div id="reportEmpty" class="info" data-i18n="step4.empty">Once packing finishes, this section shows whether the output touches any Chrome Web Store review red line (high / medium / info).</div>
         <div id="report" class="report hidden"></div>
       </div>
     </section>
 
-    <footer class="foot">
-      合规提示:本工具刻意不做字符串加密 / 控制流平坦化 / eval 解密代码——易触发 Chrome Web Store 审核拒绝。
-      只做服务端下沉或 WASM。
+    <footer class="foot" data-i18n="foot.note">
+      Compliance note: this tool deliberately avoids string encryption, control-flow flattening and eval-based decryption — they easily trigger Chrome Web Store rejections. Only server-side sinking or WASM is performed.
     </footer>
   </main>
 
+  <script src="i18n.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
