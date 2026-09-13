@@ -52,20 +52,31 @@ Chrome Web Store 政策**明确禁止 obfuscation(混淆)**,但**允许 minifica
 环境要求:**Node.js ≥ 18**(用到 `fs.rmSync` 等较新 API;Windows / macOS / Linux 均可)。
 
 ```bash
+npm install -g extshield
+```
+
+或克隆本仓库后:
+
+```bash
 cd extshield
 npm install        # 依赖:esbuild / terser / acorn / assemblyscript
 ```
 
+全局安装后命令为 `extshield`;在克隆的仓库里,用 `node bin/extshield.js`(或 `npx extshield`)加同样的子命令。
+
 ## 使用
+
+extshield 提供两种使用方式:**可视化打包器**(本地网页界面)与**命令行**。首次使用建议从可视化打包器开始 ——
+它把探测到的入口、体积对比与合规报告集中在一页里展示,无需记忆任何参数;命令行则用于脚本与 CI。
 
 ### 1) 加固(harden)
 
 ```bash
 # 用当前目录的 extshield.config.js
-node bin/extshield.js harden
+extshield harden
 
 # 指定目录 / 开启属性改名
-node bin/extshield.js harden --src ./src --out ./dist --mangle-props
+extshield harden --src ./src --out ./dist --mangle-props
 ```
 
 做了什么:
@@ -77,8 +88,8 @@ node bin/extshield.js harden --src ./src --out ./dist --mangle-props
 ### 2) 合规扫描(verify)
 
 ```bash
-node bin/extshield.js verify --dir ./dist
-node bin/extshield.js verify --dir ./dist --strict   # CI 卡口:中等风险也判不通过
+extshield verify --dir ./dist
+extshield verify --dir ./dist --strict   # CI 卡口:中等风险也判不通过
 ```
 
 会扫描产物,识别这些**高危/中等**模式并报告:
@@ -91,7 +102,7 @@ node bin/extshield.js verify --dir ./dist --strict   # CI 卡口:中等风险也
 ### 3) 一键演示(demo)
 
 ```bash
-node bin/extshield.js demo
+extshield demo
 ```
 
 用内置 `sample/` 扩展执行一遍 harden + verify,验证工具是否可用。
@@ -99,7 +110,7 @@ node bin/extshield.js demo
 加 `--wasm` 可一并查看 WASM 下沉的效果:
 
 ```bash
-node bin/extshield.js demo --wasm
+extshield demo --wasm
 ```
 
 ### 4) WASM 下沉(--wasm)
@@ -113,10 +124,10 @@ node bin/extshield.js demo --wasm
 
 ```bash
 # 自动下沉:由工具扫描你的源码,挑出适合的函数
-node bin/extshield.js harden --src ./src --out ./dist --wasm
+extshield harden --src ./src --out ./dist --wasm
 
 # 手动下沉:使用你自己编写的 core.ts(优先级更高)
-node bin/extshield.js harden --src ./src --out ./dist --wasm --wasm-core ./core.ts
+extshield harden --src ./src --out ./dist --wasm --wasm-core ./core.ts
 ```
 
 两种方式的区别:
@@ -213,18 +224,21 @@ CompileError: WebAssembly.Module(): ... violates the following CSP directive: "s
 - name: 加固并校验
   run: |
     npm ci
-    node bin/extshield.js harden
-    node bin/extshield.js verify --dir ./dist --strict
+    npx extshield harden
+    npx extshield verify --dir ./dist --strict
 ```
 
 ## 可视化打包器(GUI)
 
-不想敲命令?进 `gui/` 启动一个本地 Web 应用:选文件夹 → 选方式 → 选保存位置 → 一键合规打包,
+不想敲命令?一条命令启动本地 Web 应用:选文件夹 → 选方式 → 选保存位置 → 一键合规打包,
 打包完成后同时在页面上给出合规扫描报告。
 
 ```bash
-node gui/server.js   # 打开 http://localhost:4173
+extshield gui              # 打开 http://localhost:4173
+extshield gui --port 8080  # 换一个端口
 ```
+
+在克隆的仓库里,`npm run gui` 启动的是同一个界面。
 
 两种方式(minify / wasm)都做成可视化按钮,详见 `gui/README.md`。
 
@@ -237,7 +251,7 @@ node gui/server.js   # 打开 http://localhost:4173
 
 ```
 extshield/
-├── bin/extshield.js        CLI 入口(harden / verify / demo)
+├── bin/extshield.js        CLI 入口(harden / verify / demo / gui)
 ├── src/
 │   ├── harden.js           esbuild 打包 + 激进压缩(+ 可选 terser 属性改名)
 │   ├── verify.js           scan() 纯函数扫描 + run() CLI 包装(退出码)

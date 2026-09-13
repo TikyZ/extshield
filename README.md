@@ -62,18 +62,26 @@ cd extshield
 npm install        # deps: esbuild / terser / acorn / assemblyscript
 ```
 
+After a global install the command is `extshield`. Inside a clone, use `node bin/extshield.js`
+(or `npx extshield`) followed by the same subcommand.
+
 ## Usage
 
 > **Note:** the CLI prints its progress messages in Chinese. The GUI (see below) is available in **English and Chinese**, and defaults to English unless your browser language is Chinese.
+
+There are two ways to run extshield: the **visual packer** (a local web interface) and the **command line**.
+If this is your first time, the visual packer is the easier starting point — it shows the detected entry
+points, the size comparison and the compliance report on a single page, and needs no flags.
+The command line is there for scripting and CI.
 
 ### 1) Harden (`harden`)
 
 ```bash
 # uses extshield.config.js from the current directory
-node bin/extshield.js harden
+extshield harden
 
 # explicit directories / enable property mangling
-node bin/extshield.js harden --src ./src --out ./dist --mangle-props
+extshield harden --src ./src --out ./dist --mangle-props
 ```
 
 What it does:
@@ -86,8 +94,8 @@ What it does:
 ### 2) Compliance scan (`verify`)
 
 ```bash
-node bin/extshield.js verify --dir ./dist
-node bin/extshield.js verify --dir ./dist --strict   # CI gate: medium risk also fails
+extshield verify --dir ./dist
+extshield verify --dir ./dist --strict   # CI gate: medium risk also fails
 ```
 
 It scans the output and reports **high / medium** risk patterns such as:
@@ -100,7 +108,7 @@ Exit codes: `0` for pass, `1` when high-risk items are present (or medium-risk i
 ### 3) One-shot demo (`demo`)
 
 ```bash
-node bin/extshield.js demo
+extshield demo
 ```
 
 Runs harden + verify against the bundled `sample/` extension to confirm the tool works.
@@ -108,7 +116,7 @@ Runs harden + verify against the bundled `sample/` extension to confirm the tool
 Add `--wasm` to also see the WASM sinking in action:
 
 ```bash
-node bin/extshield.js demo --wasm
+extshield demo --wasm
 ```
 
 ### 4) WASM sinking (`--wasm`)
@@ -124,10 +132,10 @@ such as `memory` and `__new` keep their names; only your own function names stop
 
 ```bash
 # auto sinking: the tool scans your source and picks suitable functions
-node bin/extshield.js harden --src ./src --out ./dist --wasm
+extshield harden --src ./src --out ./dist --wasm
 
 # manual sinking: use your own core.ts (takes priority)
-node bin/extshield.js harden --src ./src --out ./dist --wasm --wasm-core ./core.ts
+extshield harden --src ./src --out ./dist --wasm --wasm-core ./core.ts
 ```
 
 How the two modes differ:
@@ -232,18 +240,22 @@ Drop it in your project root and it is picked up automatically. Every field is o
 - name: Harden and verify
   run: |
     npm ci
-    node bin/extshield.js harden
-    node bin/extshield.js verify --dir ./dist --strict
+    npx extshield harden
+    npx extshield verify --dir ./dist --strict
 ```
 
 ## Visual packer (GUI)
 
-Prefer clicking to typing? Start a local web app from `gui/`: pick a folder → pick a mode → pick a save
-location → pack it compliantly in one click, with the compliance report rendered on the page afterwards.
+Prefer clicking to typing? Start the local web app with one command, then pick a folder → pick a mode →
+pick a save location → pack it compliantly in one click, with the compliance report rendered on the page
+afterwards.
 
 ```bash
-node gui/server.js   # then open http://localhost:4173
+extshield gui              # then open http://localhost:4173
+extshield gui --port 8080  # use a different port
 ```
+
+Inside a clone of this repository, `npm run gui` starts the same interface.
 
 Both modes (minify / wasm) are available as buttons; see `gui/README.md` for details.
 
@@ -259,7 +271,7 @@ and cross-site requests.
 
 ```
 extshield/
-├── bin/extshield.js        CLI entry (harden / verify / demo)
+├── bin/extshield.js        CLI entry (harden / verify / demo / gui)
 ├── src/
 │   ├── harden.js           esbuild bundling + aggressive minify (+ optional terser property mangling)
 │   ├── verify.js           scan() pure-function scanner + run() CLI wrapper (exit codes)

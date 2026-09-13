@@ -8,6 +8,7 @@
  *   harden   对扩展源码做合规加固(激进压缩 + 改名 + 去注释/sourcemap)
  *   verify   扫描打包产物,识别会触发商店审核红线的风险模式
  *   demo     用内置示例扩展跑一遍 harden + verify,验证工具可用
+ *   gui      启动本地可视化打包器(浏览器界面)
  *
  * 设计原则:只做 Chrome Web Store 政策允许的"压缩(minification)",
  * 不做被禁止的"混淆(obfuscation:字符串加密 / 控制流平坦化 / eval 解密代码)"。
@@ -30,8 +31,10 @@ extshield — Chrome 扩展压缩合规加固工具
   extshield harden [--src <dir>] [--out <dir>] [--config <file>] [--mangle-props] [--wasm]
   extshield verify [--dir <dir>] [--config <file>] [--strict]
   extshield demo [--wasm]
+  extshield gui [--port <n>]
 
 选项:
+  --port <n>            gui 子命令的监听端口(默认 4173)
   --src <dir>          扩展源码目录 (默认 ./src 或配置里的 srcDir)
   --out <dir>          加固输出目录 (默认 ./dist)
   --config <file>      配置文件路径 (默认 ./extshield.config.js)
@@ -84,6 +87,8 @@ function parseArgs(argv) {
       args.dir = argv[++i];
     } else if (a === '--config') {
       args.config = argv[++i];
+    } else if (a === '--port') {
+      args.port = argv[++i];
     } else {
       args._.push(a);
     }
@@ -233,6 +238,17 @@ async function run() {
     console.log('\n==> [2/2] verify 加固产物');
     const report = await VERIFY.run(cfg, { strict: false });
     process.exit(report.exitCode);
+    return;
+  }
+
+  if (cmd === 'gui') {
+    const guiEntry = path.join(__dirname, '..', 'gui', 'server.js');
+    if (!fs.existsSync(guiEntry)) {
+      console.error('未找到可视化打包器(gui/server.js),请重新安装 extshield。');
+      process.exit(1);
+    }
+    if (args.port) process.env.PORT = String(args.port);
+    require(guiEntry); // 服务在模块内自行启动并打印地址
     return;
   }
 

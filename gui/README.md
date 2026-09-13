@@ -37,7 +37,7 @@ node gui/server.js
 
 - 两种方式都只做 Chrome 政策允许的压缩 / WASM,**不做**字符串加密、控制流平坦化、
   `eval` 解密代码等被禁的混淆。
-- 打包产物可用 `node bin/extshield.js verify --dir <解压目录>` 复检,确认零红线。
+- 打包产物可用 `extshield verify --dir <解压目录>` 复检,确认零红线。
 
 ## 接口(供自动化 / CI 调用)
 
