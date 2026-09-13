@@ -158,9 +158,30 @@ async function caseManualString() {
  */
 const { execFileSync } = require('child_process');
 
+/**
+ * 建临时目录并登记,测试结束时统一删除。
+ * 以前直接用 fs.mkdtempSync,跑一次 npm test 就在系统临时目录里留下十几个
+ * ess-* 目录,长期累积(实测攒了 250+ 个)。清理失败不影响测试结论。
+ */
+const TMP_DIRS = [];
+function tmpDir(prefix) {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  TMP_DIRS.push(d);
+  return d;
+}
+process.on('exit', () => {
+  for (const d of TMP_DIRS) {
+    try {
+      fs.rmSync(d, { recursive: true, force: true });
+    } catch {
+      // 清不掉就算了,不能因为清理失败掩盖测试结果
+    }
+  }
+});
+
 function caseStringRoundTrip() {
   console.log('\n[4/7] 字符串下沉的语义一致性(实跑 wasm)');
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ess-str-'));
+  const root = tmpDir('ess-str-');
   const src = path.join(root, 'src');
   fs.mkdirSync(src, { recursive: true });
   fs.writeFileSync(
@@ -209,10 +230,27 @@ function caseStringRoundTrip() {
     check('抽出内联 wasm', false);
     return;
   }
-  const X = new WebAssembly.Instance(
-    new WebAssembly.Module(Buffer.from(m[1], 'base64')),
-    { env: { abort: () => { throw new Error('abort'); } } }
-  ).exports;
+  const wasmBytes = Buffer.from(m[1], 'base64');
+  const mod = new WebAssembly.Module(wasmBytes);
+  const X = new WebAssembly.Instance(mod, {
+    env: { abort: () => { throw new Error('abort'); } },
+  }).exports;
+
+  // 导出名必须已抹除:原函数名一旦留在 wasm 里,等于给逆向的人一套"哪个函数值钱"
+  // 的路标。同时运行时接口(memory / __new)必须原样保留,否则字符串过不去。
+  const names = WebAssembly.Module.exports(mod).map((e) => e.name);
+  const userFns = names.filter((n) => n.indexOf('__') !== 0 && n !== 'memory');
+  check('wasm 里搜不到原函数名(normalize)', !wasmBytes.includes(Buffer.from('normalize', 'utf8')));
+  check(
+    '函数导出只剩短名',
+    userFns.length === 1 && /^f\d+$/.test(userFns[0]),
+    userFns.join(',') || '(无)'
+  );
+  check(
+    '运行时接口未被改名(memory / __new)',
+    names.includes('memory') && names.includes('__new'),
+    names.join(',')
+  );
   const lo = (v) => {
     if (v == null) return 0;
     const p = X.__new(v.length << 1, 1) >>> 0;
@@ -234,10 +272,11 @@ function caseStringRoundTrip() {
     if (x.startsWith('http://')) x = x.slice(7);
     return x;
   };
+  const sinkFn = X[userFns[0]]; // 导出名已改成短名,只能按实际导出取
   const cases = ['', 'HTTP://Example.COM/x', '  https://a.b/  ', 'abc', 'http://中文.com/路径'];
   let ok = true;
   for (const c of cases) {
-    const got = li(X.normalize(lo(c)));
+    const got = li(sinkFn(lo(c)));
     if (got !== ref(c)) {
       ok = false;
       console.log('    差异', JSON.stringify(c), 'wasm=', JSON.stringify(got), 'js=', JSON.stringify(ref(c)));
@@ -299,7 +338,7 @@ globalThis.__R = [isValid(5), isValid(500), scaled(3), flagOf(5)];
 
 function caseTypeRoundTrip() {
   console.log('\n[6/7] 返回类型与局部变量类型(实跑产物)');
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ess-type-'));
+  const root = tmpDir('ess-type-');
   const src = path.join(root, 'src');
   fs.mkdirSync(src, { recursive: true });
   fs.writeFileSync(path.join(src, 'manifest.json'), JSON.stringify({
@@ -373,7 +412,7 @@ function caseTypeRoundTrip() {
   check('保留原有指令(object-src)', /object-src/.test(csp), csp);
 
   // 已有 CSP 时必须只做"追加",不能把用户原有配置覆盖掉
-  const mergeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ess-csp-'));
+  const mergeDir = tmpDir('ess-csp-');
   fs.writeFileSync(path.join(mergeDir, 'manifest.json'), JSON.stringify({
     manifest_version: 3, name: 'm', version: '1.0',
     content_security_policy: { extension_pages: "script-src 'self'; object-src 'none';" },
@@ -396,7 +435,7 @@ async function caseHardening() {
 
   // (1) $ 开头的模块级常量:以前用 `\b$MAX\b` 匹配不到,常量没进 core.ts,
   //     引用它的函数会被判"可沉"但编译不过、最后被丢掉
-  const d1 = fs.mkdtempSync(path.join(os.tmpdir(), 'ess-h1-'));
+  const d1 = tmpDir('ess-h1-');
   fs.writeFileSync(path.join(d1, 'a.js'),
     'const $MAX = 50;\nfunction clampDollar(v){ return v > $MAX ? $MAX : v; }\n');
   const s1 = A.findCandidates(d1);
@@ -423,7 +462,7 @@ async function caseHardening() {
   // (2) content script 要分两类(CSP 规则完全不同,已核对 Chrome 官方文档):
   //     默认「隔离世界」的 content script 自带放行 wasm 的 CSP → 照常下沉
   //     只有 "world":"MAIN" 的才套用网页 CSP → 必须排除
-  const d2 = fs.mkdtempSync(path.join(os.tmpdir(), 'ess-h2-'));
+  const d2 = tmpDir('ess-h2-');
   fs.writeFileSync(path.join(d2, 'manifest.json'), JSON.stringify({
     manifest_version: 3, name: 'h', version: '1.0',
     content_scripts: [
@@ -495,7 +534,7 @@ async function caseHardening() {
 
   // (6) 字符串不再无界吃内存(manual sink 已换 incremental 运行时)
   const MANUAL = require('../src/manual-sink');
-  const d3 = fs.mkdtempSync(path.join(os.tmpdir(), 'ess-h3-'));
+  const d3 = tmpDir('ess-h3-');
   const ts = path.join(d3, 'core.ts');
   const wasm = path.join(d3, 'core.wasm');
   fs.writeFileSync(ts, 'export function norm(u: string): string { return u.toLowerCase(); }\n');
@@ -533,7 +572,7 @@ async function caseHardening() {
   //     改用 (?<![\w$]) / (?![\w$]) 后两侧都不许与标识符字符相邻。
   const HARDEN = require('../src/harden');
 
-  const d4 = fs.mkdtempSync(path.join(os.tmpdir(), 'ess-h4-'));
+  const d4 = tmpDir('ess-h4-');
   fs.writeFileSync(path.join(d4, 'a.js'), 'var $MAX = 50;\n');
   fs.writeFileSync(path.join(d4, 'b.js'), 'console.log($MAX);\n');
   const r1 = HARDEN.detectCrossFileGlobals({ srcDir: d4, entries: ['a.js', 'b.js'] });
@@ -543,7 +582,7 @@ async function caseHardening() {
     JSON.stringify(r1)
   );
 
-  const d5 = fs.mkdtempSync(path.join(os.tmpdir(), 'ess-h5-'));
+  const d5 = tmpDir('ess-h5-');
   fs.writeFileSync(path.join(d5, 'a.js'), 'var $MAX = 50;\n');
   fs.writeFileSync(path.join(d5, 'b.js'), 'var foo$MAX = 1;\n');
   const r2 = HARDEN.detectCrossFileGlobals({ srcDir: d5, entries: ['a.js', 'b.js'] });
@@ -553,7 +592,7 @@ async function caseHardening() {
     JSON.stringify(r2)
   );
 
-  const d6 = fs.mkdtempSync(path.join(os.tmpdir(), 'ess-h6-'));
+  const d6 = tmpDir('ess-h6-');
   fs.writeFileSync(path.join(d6, 'a.js'), 'var state = 1;\n');
   fs.writeFileSync(path.join(d6, 'b.js'), 'console.log(state2);\n');
   const r3 = HARDEN.detectCrossFileGlobals({ srcDir: d6, entries: ['a.js', 'b.js'] });
@@ -563,7 +602,7 @@ async function caseHardening() {
     JSON.stringify(r3)
   );
 
-  const d7 = fs.mkdtempSync(path.join(os.tmpdir(), 'ess-h7-'));
+  const d7 = tmpDir('ess-h7-');
   fs.writeFileSync(path.join(d7, 'a.js'), 'var state = 1;\n');
   fs.writeFileSync(path.join(d7, 'b.js'), 'console.log(state);\n');
   const r4 = HARDEN.detectCrossFileGlobals({ srcDir: d7, entries: ['a.js', 'b.js'] });

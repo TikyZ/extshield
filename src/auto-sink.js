@@ -19,6 +19,7 @@ const fs = require('fs');
 const path = require('path');
 const ASC = require('./asc');
 const RT = require('./runtime-gen');
+const WASMRENAME = require('./wasm-rename');
 
 let acorn;
 function lazyAcorn() {
@@ -512,6 +513,9 @@ function compile(coreTsPath, wasmPath) {
  * 把候选函数在原 JS 里替换成 wasm 调用(同步、无缝)。返回被替换的函数名。
  */
 function rewriteWithInlineWasm(candidates, wasmPath) {
+  // 先抹掉 wasm 里的函数导出名。否则 `(export "hashSeed" ...)` 会把原函数名原样
+  // 交给逆向的人 —— 等于给他一套"哪个函数值钱"的路标。JS 侧调用点靠返回的 map 对齐。
+  const ren = WASMRENAME.renameFunctionExports(wasmPath);
   const b64 = fs.readFileSync(wasmPath).toString('base64');
   // 包一层 try/catch:扩展页 CSP 拦掉 wasm 编译时,不能把整个文件带崩。
   const runtime = RT.guarded(
@@ -542,9 +546,12 @@ function rewriteWithInlineWasm(candidates, wasmPath) {
     for (const c of sorted) {
       // 返回布尔的必须 !! 收一下 —— wasm 返回的是 1/0,不收就变成数字了
       const coerce = c.retKind === 'bool' ? '!!' : '';
+      // wasm 侧的函数名已被抹成短名,这里必须用同一份映射,否则取不到导出。
+      // JS 这边的函数名(c.name)保持不变 —— 它是用户代码的调用接口。
+      const callName = ren.map.get(c.wasmName) || c.wasmName;
       const replacement =
         `function ${c.name}(${c.params.join(', ')}) { ` +
-        `return ${coerce}__essW.${c.wasmName}(${c.params.join(', ')}); }`;
+        `return ${coerce}__essW.${callName}(${c.params.join(', ')}); }`;
       code = code.slice(0, c.start) + replacement + code.slice(c.end);
       done.push(c.name);
     }

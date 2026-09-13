@@ -25,6 +25,7 @@ const fs = require('fs');
 const path = require('path');
 const ASC = require('./asc');
 const RT = require('./runtime-gen');
+const WASMRENAME = require('./wasm-rename');
 
 let acorn;
 function lazyAcorn() {
@@ -124,12 +125,17 @@ function buildRuntime(wasmPath) {
   );
 }
 
-/** 给一个签名生成替换用的函数源码 */
-function renderFunction(sig) {
+/**
+ * 给一个签名生成替换用的函数源码。
+ * @param {object} sig  core.ts 里解析出的签名
+ * @param {Map<string,string>} nameMap  wasm 导出名映射(core.ts 原名 -> 短名)。
+ *   wasm 里的函数名已被抹掉,这里必须按映射取;JS 侧的函数名(sig.name)保持不变。
+ */
+function renderFunction(sig, nameMap) {
   const args = sig.params
     .map((p) => (p.type === 'string' ? '__essW.lo(' + p.name + ')' : p.name))
     .join(', ');
-  const call = '__essW.x.' + sig.name + '(' + args + ')';
+  const call = '__essW.x.' + ((nameMap && nameMap.get(sig.name)) || sig.name) + '(' + args + ')';
   const body =
     sig.ret === 'string'
       ? 'return __essW.li(' + call + ');'
@@ -164,6 +170,9 @@ function rewriteMatches(srcDir, sigs, wasmPath, opts = {}) {
     return process.platform === 'win32' ? r.toLowerCase() : r;
   };
   const byName = new Map(sigs.map((s) => [s.name, s]));
+  // 先抹掉 wasm 里的函数导出名,再生成运行时(运行时要读的是改过之后的文件)。
+  // memory / __new 这类运行时接口由 wasm-rename 内部保护,不会被动。
+  const ren = WASMRENAME.renameFunctionExports(wasmPath);
   const runtime = buildRuntime(wasmPath);
   const done = [];
   const warnings = [];
@@ -225,7 +234,10 @@ function rewriteMatches(srcDir, sigs, wasmPath, opts = {}) {
     // 从后往前替换,避免前面的改动把后面的偏移量弄乱
     let out = code;
     for (const h of hits.slice().sort((a, b) => b.start - a.start)) {
-      out = out.slice(0, h.start) + renderFunction(byName.get(h.name)) + out.slice(h.end);
+      out =
+        out.slice(0, h.start) +
+        renderFunction(byName.get(h.name), ren.map) +
+        out.slice(h.end);
       done.push(h.name);
     }
     const at = insertionIndex(out);
